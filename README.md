@@ -50,7 +50,7 @@ npx eas-cli@latest build -p android --profile preview
 
 ### Demo login
 
-A demo branch, four demo menu items and one pending demo order were seeded. The demo staff credentials are in `.seed.local.json` (gitignored, never committed). Delete the demo account/data before production.
+The development PocketBase instance was seeded with a demo branch, four demo menu items and one pending demo order. The demo staff credentials are stored locally in `.seed.local.json`, which is gitignored and **not part of this repository**. On a fresh checkout, create staff accounts through the PocketBase admin/superuser API and set `EXPO_PUBLIC_PB_URL`. Delete demo data before production.
 
 ## Branch and security model
 
