@@ -251,6 +251,10 @@ async function applyOutboxEntry(entry: OutboxEntry): Promise<void> {
       const patch: Record<string, unknown> = { status };
       if (status === 'ready') patch.ready_at = at;
       if (status === 'completed') patch.completed_at = at;
+      if (status === 'cancelled') {
+        const reason = String(entry.payload.cancellationReason ?? '').trim();
+        if (reason) patch.cancellation_reason = reason;
+      }
       await pb
         .collection(COLLECTIONS.orders)
         .update(orderId, scopeWritePayload(COLLECTIONS.orders, patch, 'update'));

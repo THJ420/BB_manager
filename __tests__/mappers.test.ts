@@ -16,15 +16,18 @@ import {
   isPocketBaseFileUrl,
   mapBranchSettingsRecord,
   mapMenuRecord,
+  mapOrderRecord,
   mapStoreConfigRecord,
   toBranchSettingsRecord,
   toMenuItemRecord,
+  toOrderRecord,
   toStoreRecord,
 } from '../src/services/mappers';
 import {
   createDefaultStoreConfig,
   createDefaultTerminalSettings,
   createSeedMenu,
+  createSeedOrders,
 } from '../src/lib/seed';
 import { MenuItem, StoreOperationsConfig, TerminalSettings } from '../src/types';
 
@@ -210,5 +213,42 @@ describe('branch settings mapping', () => {
     };
 
     expect(mapStoreConfigRecord(asRecord(toStoreRecord(config)))).toEqual(config);
+  });
+});
+
+describe('order rejection mapping', () => {
+  it('reads the rejection reason from a PocketBase order', () => {
+    const order = mapOrderRecord(
+      asRecord({
+        collectionName: 'orders',
+        branch_id: 'branch_dt_01',
+        order_number: 'R1',
+        customer_name: 'Guest',
+        customer_phone: '',
+        status: 'cancelled',
+        items: [],
+        total_amount: 10,
+        pickup_code: 'P1',
+        channel: 'online',
+        cancellation_reason: 'Item currently out of stock',
+      })
+    );
+
+    expect(order.cancellationReason).toBe('Item currently out of stock');
+  });
+
+  it('writes the rejection reason back to a PocketBase order payload', () => {
+    const base = createSeedOrders(NOW)[0]!;
+
+    expect(
+      toOrderRecord({
+        ...base,
+        status: 'cancelled',
+        cancellationReason: 'Kitchen is too busy / overloaded',
+      })
+    ).toMatchObject({
+      status: 'cancelled',
+      cancellation_reason: 'Kitchen is too busy / overloaded',
+    });
   });
 });

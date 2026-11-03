@@ -35,6 +35,8 @@ export interface Order {
   pickupCode: string;
   notes?: string;
   channel: OrderChannel;
+  /** Why the order was rejected; present when status is cancelled. */
+  cancellationReason?: string;
 }
 
 export interface MenuItem {

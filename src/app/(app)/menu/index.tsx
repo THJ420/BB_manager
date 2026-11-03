@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActionButton } from '../../../components/ActionButton';
 import { DialogModal } from '../../../components/DialogModal';
@@ -8,6 +8,7 @@ import { MenuItemCard } from '../../../components/MenuItemCard';
 import { MenuItemEditorModal } from '../../../components/MenuItemEditorModal';
 import { ScreenHeader } from '../../../components/ScreenHeader';
 import { TextField } from '../../../components/TextField';
+import { usePullToRefresh } from '../../../hooks/usePullToRefresh';
 import { filterMenu, menuCategoryOptions } from '../../../lib/domain';
 import { useApp } from '../../../state/AppProvider';
 import {
@@ -19,7 +20,8 @@ import { Colors, Spacing } from '../../../theme/colors';
 import { MenuItem } from '../../../types';
 
 export default function MenuStockScreen() {
-  const { state, setMenuItemStock, saveMenuItem, deleteMenuItem } = useApp();
+  const { state, setMenuItemStock, saveMenuItem, deleteMenuItem, refreshData } = useApp();
+  const { refreshing, onRefresh } = usePullToRefresh(refreshData);
   const role = state.session?.role ?? '';
   const canCreate = canCreateMenuItems(role);
   const canDelete = canDeleteMenuItems(role);
@@ -98,6 +100,17 @@ export default function MenuStockScreen() {
         )}
         columnWrapperStyle={styles.gridRow}
         contentContainerStyle={styles.gridContent}
+        overScrollMode="always"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[Colors.primary]}
+            progressBackgroundColor={Colors.surfaceElevated}
+            tintColor={Colors.primary}
+            title="Refreshing menu…"
+          />
+        }
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Text style={styles.emptyEmoji}>🍔</Text>
@@ -173,6 +186,7 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.sm,
     paddingBottom: 32,
     gap: 12,
+    flexGrow: 1,
   },
   gridRow: {
     justifyContent: 'space-between',

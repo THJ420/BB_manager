@@ -11,8 +11,11 @@ export interface OrderCardProps {
   order: Order;
   now: number;
   onAdvance: (orderId: string, status: OrderStatus) => void;
+  onReject?: (order: Order) => void;
   onSelect?: (order: Order) => void;
   selected?: boolean;
+  /** Recently arrived over SSE; the Orders Board clears this after a few seconds. */
+  highlighted?: boolean;
 }
 
 const ACTION_VARIANT: Record<'new' | 'preparing' | 'ready', ButtonVariant> = {
@@ -21,12 +24,22 @@ const ACTION_VARIANT: Record<'new' | 'preparing' | 'ready', ButtonVariant> = {
   ready: 'slate',
 };
 
-export function OrderCard({ order, now, onAdvance, onSelect, selected }: OrderCardProps) {
+export function OrderCard({
+  order,
+  now,
+  onAdvance,
+  onReject,
+  onSelect,
+  selected,
+  highlighted = false,
+}: OrderCardProps) {
   const timing = orderTiming(order, now);
   const action = orderAction(order.status);
   const variant = action && order.status !== 'completed' && order.status !== 'cancelled'
     ? ACTION_VARIANT[order.status as 'new' | 'preparing' | 'ready']
     : 'primary';
+  const canReject =
+    Boolean(onReject) && order.status !== 'completed' && order.status !== 'cancelled';
 
   const content = (
     <>
@@ -37,7 +50,14 @@ export function OrderCard({ order, now, onAdvance, onSelect, selected }: OrderCa
             <Text style={styles.pinText}>PIN {order.pickupCode}</Text>
           </View>
         </View>
-        <StatusBadge status={order.status} />
+        <View style={styles.headerRight}>
+          {highlighted ? (
+            <View style={styles.justInPill}>
+              <Text style={styles.justInText}>JUST IN</Text>
+            </View>
+          ) : null}
+          <StatusBadge status={order.status} />
+        </View>
       </View>
 
       <View style={styles.metaRow}>
@@ -80,6 +100,12 @@ export function OrderCard({ order, now, onAdvance, onSelect, selected }: OrderCa
 
       {order.notes ? <Text style={styles.notes}>Note: {order.notes}</Text> : null}
 
+      {order.status === 'cancelled' && order.cancellationReason ? (
+        <Text style={styles.rejectionReason}>
+          Rejected: {order.cancellationReason}
+        </Text>
+      ) : null}
+
       <View style={styles.totalRow}>
         <Text style={styles.totalLabel}>Total: {formatCurrency(order.totalAmount)}</Text>
         <View style={styles.channelPill}>
@@ -89,15 +115,29 @@ export function OrderCard({ order, now, onAdvance, onSelect, selected }: OrderCa
         </View>
       </View>
 
-      {action ? (
-        <ActionButton
-          label={action.label}
-          variant={variant}
-          fullWidth
-          onPress={() => onAdvance(order.id, action.next)}
-          testID={`btn_${action.next}_${order.orderNumber}`}
-          accessibilityHint={`Move order ${order.orderNumber} to ${action.next}`}
-        />
+      {action || canReject ? (
+        <View style={styles.actionRow}>
+          {action ? (
+            <ActionButton
+              label={action.label}
+              variant={variant}
+              onPress={() => onAdvance(order.id, action.next)}
+              style={styles.advanceButton}
+              testID={`btn_${action.next}_${order.orderNumber}`}
+              accessibilityHint={`Move order ${order.orderNumber} to ${action.next}`}
+            />
+          ) : null}
+          {canReject && onReject ? (
+            <ActionButton
+              label="REJECT"
+              variant="dangerOutline"
+              onPress={() => onReject(order)}
+              style={styles.rejectButton}
+              testID={`btn_reject_${order.orderNumber}`}
+              accessibilityHint={`Reject order ${order.orderNumber} with a reason`}
+            />
+          ) : null}
+        </View>
       ) : null}
     </>
   );
@@ -107,10 +147,11 @@ export function OrderCard({ order, now, onAdvance, onSelect, selected }: OrderCa
       <Pressable
         onPress={() => onSelect(order)}
         accessibilityRole="button"
-        accessibilityLabel={`Order ${order.orderNumber}, ${order.status}`}
+        accessibilityLabel={`Order ${order.orderNumber}, ${order.status}${highlighted ? ', just arrived' : ''}`}
         testID={`order_card_${order.orderNumber}`}
         style={({ pressed }) => [
           styles.card,
+          highlighted && styles.cardHighlighted,
           selected && styles.cardSelected,
           pressed && styles.cardPressed,
         ]}
@@ -121,7 +162,10 @@ export function OrderCard({ order, now, onAdvance, onSelect, selected }: OrderCa
   }
 
   return (
-    <View style={styles.card} testID={`order_card_${order.orderNumber}`}>
+    <View
+      style={[styles.card, highlighted && styles.cardHighlighted]}
+      testID={`order_card_${order.orderNumber}`}
+    >
       {content}
     </View>
   );
@@ -139,6 +183,10 @@ const styles = StyleSheet.create({
   cardSelected: {
     borderColor: Colors.primary,
   },
+  cardHighlighted: {
+    borderColor: Colors.info,
+    borderWidth: 2,
+  },
   cardPressed: {
     backgroundColor: Colors.surfaceHighlight,
   },
@@ -147,6 +195,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+  },
+  justInPill: {
+    backgroundColor: Colors.infoMuted,
+    borderWidth: 1,
+    borderColor: Colors.info,
+    borderRadius: Radius.full,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  justInText: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    color: Colors.info,
   },
   idGroup: {
     flexDirection: 'row',
@@ -258,6 +326,11 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     color: Colors.warning,
   },
+  rejectionReason: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.error,
+  },
   totalRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -280,5 +353,16 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.5,
     color: Colors.textMuted,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  advanceButton: {
+    flex: 1,
+  },
+  rejectButton: {
+    minWidth: 96,
   },
 });

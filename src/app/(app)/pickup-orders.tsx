@@ -1,12 +1,13 @@
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActionButton } from '../../components/ActionButton';
 import { HorizontalFilterChips } from '../../components/HorizontalFilterChips';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { StatusBadge } from '../../components/StatusBadge';
 import { TextField } from '../../components/TextField';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { filterLedger, OrderFilter } from '../../lib/domain';
 import { formatCurrency } from '../../lib/format';
 import { useApp } from '../../state/AppProvider';
@@ -21,7 +22,8 @@ function ledgerStamp(iso: string): string {
 
 export default function PickupOrdersScreen() {
   const router = useRouter();
-  const { state } = useApp();
+  const { state, refreshData } = useApp();
+  const { refreshing, onRefresh } = usePullToRefresh(refreshData);
   const [selectedFilter, setSelectedFilter] = useState<OrderFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -81,6 +83,17 @@ export default function PickupOrdersScreen() {
         data={filteredOrders}
         keyExtractor={(order) => order.id}
         contentContainerStyle={styles.listContent}
+        overScrollMode="always"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[Colors.primary]}
+            progressBackgroundColor={Colors.surfaceElevated}
+            tintColor={Colors.primary}
+            title="Refreshing ledger…"
+          />
+        }
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         renderItem={({ item }) => (
           <View style={styles.card} testID={`ledger_card_${item.orderNumber}`}>
@@ -123,6 +136,12 @@ export default function PickupOrdersScreen() {
                 {ledgerStamp(item.createdAt)}
               </Text>
             </View>
+
+            {item.status === 'cancelled' && item.cancellationReason ? (
+              <Text style={styles.rejectionReason}>
+                Rejected: {item.cancellationReason}
+              </Text>
+            ) : null}
           </View>
         )}
         ListEmptyComponent={
@@ -165,6 +184,7 @@ const styles = StyleSheet.create({
   listContent: {
     padding: Spacing.md,
     paddingBottom: 32,
+    flexGrow: 1,
   },
   separator: {
     height: 12,
@@ -274,6 +294,11 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: Colors.textMuted,
+  },
+  rejectionReason: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.error,
   },
   emptyState: {
     padding: Spacing.xl,

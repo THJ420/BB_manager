@@ -357,4 +357,43 @@ describe('sync outbox handlers', () => {
       branch_id: 'branch_dt_01',
     });
   });
+
+  it('sends the rejection reason when cancelling an order', async () => {
+    const update = jest.fn(async () => undefined);
+    useCollection('orders', { update });
+
+    const result = await flushOutbox([
+      entry('UPDATE_ORDER_STATUS', {
+        orderId: 'ord_101',
+        status: 'cancelled',
+        at: '2026-01-01T12:00:00.000Z',
+        cancellationReason: 'Item currently out of stock',
+      }),
+    ]);
+
+    expect(result.failedIds).toEqual([]);
+    expect(update).toHaveBeenCalledWith('ord_101', {
+      status: 'cancelled',
+      cancellation_reason: 'Item currently out of stock',
+    });
+  });
+
+  it('omits an empty rejection reason from an ordinary status update', async () => {
+    const update = jest.fn(async () => undefined);
+    useCollection('orders', { update });
+
+    await flushOutbox([
+      entry('UPDATE_ORDER_STATUS', {
+        orderId: 'ord_101',
+        status: 'ready',
+        at: '2026-01-01T12:00:00.000Z',
+        cancellationReason: '   ',
+      }),
+    ]);
+
+    expect(update).toHaveBeenCalledWith('ord_101', {
+      status: 'ready',
+      ready_at: '2026-01-01T12:00:00.000Z',
+    });
+  });
 });

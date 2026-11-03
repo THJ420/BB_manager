@@ -313,4 +313,20 @@ describe('appReducer', () => {
     expect(next.orders.find((order) => order.id === victim.id)).toBeUndefined();
     expect(next.analyticsHistory).toEqual([]);
   });
+  it('marks a rejected order cancelled and stores its reason', () => {
+    const seeded = hydratedState();
+    const victim = seeded.orders.find((order) => order.status === 'new') ?? seeded.orders[0]!;
+    const next = appReducer(seeded, {
+      type: 'REJECT_ORDER',
+      orderId: victim.id,
+      reason: 'Store closing soon / outside operating hours',
+      at: AT,
+    });
+    const rejected = next.orders.find((order) => order.id === victim.id);
+
+    expect(rejected?.status).toBe('cancelled');
+    expect(rejected?.cancellationReason).toBe(
+      'Store closing soon / outside operating hours'
+    );
+  });
 });

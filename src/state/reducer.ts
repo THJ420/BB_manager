@@ -65,6 +65,7 @@ export type AppAction =
   | { type: 'ADD_ORDER'; order: Order }
   | { type: 'UPSERT_ORDER'; order: Order }
   | { type: 'REMOVE_ORDER'; orderId: string }
+  | { type: 'REJECT_ORDER'; orderId: string; reason: string; at: string }
   | { type: 'UPDATE_ORDER_STATUS'; orderId: string; status: OrderStatus; at: string }
   | { type: 'SET_MENU'; items: MenuItem[] }
   | { type: 'UPSERT_MENU_ITEM'; item: MenuItem }
@@ -198,6 +199,16 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         orders: state.orders.filter((order) => order.id !== action.orderId),
         analyticsHistory: state.analyticsHistory.filter(
           (order) => order.id !== action.orderId
+        ),
+      };
+
+    case 'REJECT_ORDER':
+      return {
+        ...state,
+        orders: state.orders.map((order) =>
+          order.id === action.orderId
+            ? { ...order, status: 'cancelled', cancellationReason: action.reason }
+            : order
         ),
       };
 

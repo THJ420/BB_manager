@@ -1,7 +1,8 @@
 import { useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,8 +14,10 @@ import { ActionButton } from '../../components/ActionButton';
 import { ConnectionBadge } from '../../components/ConnectionBadge';
 import { HorizontalFilterChips } from '../../components/HorizontalFilterChips';
 import { OrderCard } from '../../components/OrderCard';
+import { RejectOrderModal } from '../../components/RejectOrderModal';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { StatusBadge } from '../../components/StatusBadge';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useNow } from '../../hooks/useNow';
 import { filterOrders, orderFilterOptions, OrderFilter } from '../../lib/domain';
 import { formatCurrency } from '../../lib/format';
@@ -24,13 +27,41 @@ import { Order } from '../../types';
 
 export default function OrdersBoardScreen() {
   const router = useRouter();
-  const { state, updateOrderStatus, simulateIncomingOrder } = useApp();
+  const { state, updateOrderStatus, rejectOrder, refreshData, simulateIncomingOrder } =
+    useApp();
   const { width } = useWindowDimensions();
   const now = useNow(30_000);
   const isTabletSplit = width >= 600;
+  const { refreshing, onRefresh } = usePullToRefresh(refreshData);
 
   const [selectedFilter, setSelectedFilter] = useState<OrderFilter>('all');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<Order | null>(null);
+  const [highlightedOrderId, setHighlightedOrderId] = useState<string | null>(null);
+  const knownOrderIdsRef = useRef<Set<string>>(new Set());
+  const ordersInitialisedRef = useRef(false);
+
+  // SSE prepends new tickets. Highlight the newest unseen one briefly so the
+  // kitchen eye is drawn to it without depending on the chime.
+  useEffect(() => {
+    if (!ordersInitialisedRef.current) {
+      ordersInitialisedRef.current = true;
+      state.orders.forEach((order) => knownOrderIdsRef.current.add(order.id));
+      return;
+    }
+
+    const known = knownOrderIdsRef.current;
+    const incoming = state.orders.find(
+      (order) => !known.has(order.id) && order.status === 'new'
+    );
+    knownOrderIdsRef.current = new Set(state.orders.map((order) => order.id));
+
+    if (!incoming) return;
+
+    setHighlightedOrderId(incoming.id);
+    const timer = setTimeout(() => setHighlightedOrderId(null), 10_000);
+    return () => clearTimeout(timer);
+  }, [state.orders]);
 
   const filterOptions = useMemo(() => orderFilterOptions(state.orders), [state.orders]);
   const filteredOrders = useMemo(
@@ -61,12 +92,25 @@ export default function OrdersBoardScreen() {
           order={item}
           now={now}
           onAdvance={handleAdvance}
+          onReject={(order) => setRejectTarget(order)}
           onSelect={isTabletSplit ? (order) => setSelectedOrderId(order.id) : undefined}
           selected={isTabletSplit && orderIsSelected(item, selectedOrder)}
+          highlighted={item.id === highlightedOrderId}
         />
       )}
       ItemSeparatorComponent={() => <View style={styles.listSeparator} />}
       contentContainerStyle={listContentStyle}
+      overScrollMode="always"
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={[Colors.primary]}
+          progressBackgroundColor={Colors.surfaceElevated}
+          tintColor={Colors.primary}
+          title="Refreshing orders…"
+        />
+      }
       ListEmptyComponent={
         <View style={styles.emptyState}>
           <Text style={styles.emptyEmoji}>📦</Text>
@@ -153,6 +197,13 @@ export default function OrdersBoardScreen() {
                   <Text style={styles.detailNote}>Note: {selectedOrder.notes}</Text>
                 ) : null}
 
+                {selectedOrder.status === 'cancelled' &&
+                selectedOrder.cancellationReason ? (
+                  <Text style={styles.detailRejection}>
+                    Rejection reason: {selectedOrder.cancellationReason}
+                  </Text>
+                ) : null}
+
                 <View style={styles.detailFooter}>
                   <Text style={styles.detailTotal}>
                     Total {formatCurrency(selectedOrder.totalAmount)}
@@ -172,6 +223,17 @@ export default function OrdersBoardScreen() {
       ) : (
         list
       )}
+
+      <RejectOrderModal
+        visible={rejectTarget !== null}
+        order={rejectTarget}
+        onClose={() => setRejectTarget(null)}
+        onConfirm={(reason) => {
+          const target = rejectTarget;
+          setRejectTarget(null);
+          if (target) void rejectOrder(target.id, reason);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -192,11 +254,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.md,
     paddingBottom: 32,
+    flexGrow: 1,
   },
   splitListContent: {
     paddingHorizontal: Spacing.md,
     paddingVertical: 12,
     paddingBottom: 24,
+    flexGrow: 1,
   },
   listSeparator: {
     height: 12,
@@ -295,6 +359,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontStyle: 'italic',
     color: Colors.warning,
+  },
+  detailRejection: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.error,
   },
   detailFooter: {
     marginTop: 6,

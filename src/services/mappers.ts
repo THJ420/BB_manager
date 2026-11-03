@@ -117,6 +117,7 @@ export function mapOrderRecord(record: RecordModel): Order {
     pickupCode: asString(record.pickup_code),
     notes: asString(record.notes) || undefined,
     channel,
+    cancellationReason: asString(record.cancellation_reason) || undefined,
   };
 }
 
@@ -264,6 +265,7 @@ export function toOrderRecord(order: Order): Record<string, unknown> {
     pickup_code: order.pickupCode,
     notes: order.notes ?? '',
     channel: order.channel,
+    cancellation_reason: order.cancellationReason ?? '',
     ready_at: order.readyAt ?? '',
     completed_at: order.completedAt ?? '',
     estimated_pickup_at: order.estimatedPickupAt ?? '',

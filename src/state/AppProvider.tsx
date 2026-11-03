@@ -100,6 +100,7 @@ interface AppContextValue {
   login: (email: string, password: string, branchCode: string) => Promise<LoginResult>;
   logout: () => Promise<void>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
+  rejectOrder: (orderId: string, reason: string) => Promise<void>;
   simulateIncomingOrder: () => Promise<void>;
   setMenuItemStock: (itemId: string, inStock: boolean) => Promise<void>;
   setMenuItemPrice: (itemId: string, price: number) => Promise<void>;
@@ -117,6 +118,8 @@ interface AppContextValue {
   toggleAcceptingReservations: (accepting: boolean) => Promise<void>;
   saveTerminalSettings: (settings: TerminalSettings) => Promise<void>;
   syncOutboxNow: () => Promise<void>;
+  /** Pull-to-refresh: flush pending writes, then reconcile the branch snapshot. */
+  refreshData: () => Promise<void>;
   clearOutbox: () => Promise<void>;
   runSyncDiagnostics: () => Promise<SyncDiagnosticsReport>;
   setConnectionStatus: (status: ConnectionStatus) => void;
@@ -591,6 +594,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [enqueue]
   );
 
+  /** Rejection always carries a reason; PocketBase enforces it server-side too. */
+  const rejectOrder = useCallback(
+    async (orderId: string, reason: string): Promise<void> => {
+      const trimmed = reason.trim();
+      if (!trimmed) {
+        console.error('[orders] rejection blocked: a reason is required.');
+        return;
+      }
+      const order = stateRef.current.orders.find((entry) => entry.id === orderId);
+      const at = new Date().toISOString();
+      dispatch({ type: 'REJECT_ORDER', orderId, reason: trimmed, at });
+      await enqueue(
+        'UPDATE_ORDER_STATUS',
+        `Order #${order?.orderNumber ?? orderId} rejected — ${trimmed}`,
+        { orderId, status: 'cancelled', at, cancellationReason: trimmed }
+      );
+    },
+    [enqueue]
+  );
+
   const simulateIncomingOrder = useCallback(async (): Promise<void> => {
     if (isPocketBaseConfigured) return;
     const order = buildSimulatedOrder(
@@ -928,6 +951,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [refreshRemoteDataSilently]);
 
   /**
+   * Pull-to-refresh entry point. Pending mutations flush first so the fetched
+   * snapshot cannot roll back an unsynced optimistic change; demo mode just
+   * resolves after a short pause so the RefreshControl animation completes.
+   */
+  const refreshData = useCallback(async (): Promise<void> => {
+    if (!isPocketBaseConfigured) {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      return;
+    }
+    const branchId = stateRef.current.session?.branchId;
+    if (!branchId) return;
+    if (stateRef.current.outbox.length > 0) {
+      await syncOutboxNow();
+    }
+    await refreshRemoteData(branchId, { silent: true });
+  }, [refreshRemoteData, syncOutboxNow]);
+
+  /**
    * Flips the terminal out of OFFLINE as soon as the host answers /api/health,
    * re-subscribes realtime, and lets the caller resume the outbox.
    */
@@ -1148,6 +1189,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       login,
       logout,
       updateOrderStatus,
+      rejectOrder,
       simulateIncomingOrder,
       setMenuItemStock,
       setMenuItemPrice,
@@ -1162,6 +1204,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleAcceptingReservations,
       saveTerminalSettings,
       syncOutboxNow,
+      refreshData,
       clearOutbox,
       runSyncDiagnostics,
       setConnectionStatus,
@@ -1172,6 +1215,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       login,
       logout,
       updateOrderStatus,
+      rejectOrder,
       simulateIncomingOrder,
       setMenuItemStock,
       setMenuItemPrice,
@@ -1186,6 +1230,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleAcceptingReservations,
       saveTerminalSettings,
       syncOutboxNow,
+      refreshData,
       clearOutbox,
       runSyncDiagnostics,
       setConnectionStatus,

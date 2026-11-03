@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import {
   Animated,
   FlatList,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Switch,
@@ -16,6 +17,7 @@ import { ScreenHeader } from '../../components/ScreenHeader';
 import { TableCard } from '../../components/TableCard';
 import { TableEditorModal } from '../../components/TableEditorModal';
 import { DialogModal } from '../../components/DialogModal';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import {
   filterReservations,
   reservationFilterOptions,
@@ -35,7 +37,9 @@ export default function DiningTablesScreen() {
     saveTable,
     deleteTable,
     updateReservationStatus,
+    refreshData,
   } = useApp();
+  const { refreshing, onRefresh } = usePullToRefresh(refreshData);
   const role = state.session?.role ?? '';
   const canDelete = canDeleteTables(role);
   const canCreate = canCreateTables(role);
@@ -188,6 +192,8 @@ export default function DiningTablesScreen() {
           {isReservationsView ? (
             <GuestReservationsPanel
               reservations={state.reservations}
+              refreshing={refreshing}
+              onRefresh={onRefresh}
               onToggleArrival={(reservationId, status) =>
                 void updateReservationStatus(reservationId, status)
               }
@@ -196,6 +202,8 @@ export default function DiningTablesScreen() {
             <DiningTablesPanel
               tables={state.tables}
               canCreate={canCreate}
+              refreshing={refreshing}
+              onRefresh={onRefresh}
               onEdit={openEdit}
             />
           )}
@@ -248,9 +256,13 @@ export default function DiningTablesScreen() {
 
 function GuestReservationsPanel({
   reservations,
+  refreshing,
+  onRefresh,
   onToggleArrival,
 }: {
   reservations: Reservation[];
+  refreshing: boolean;
+  onRefresh: () => void;
   onToggleArrival: (reservationId: string, status: ReservationStatus) => void;
 }) {
   const [selectedFilter, setSelectedFilter] = useState<ReservationFilter>('all');
@@ -279,6 +291,17 @@ function GuestReservationsPanel({
         )}
         style={styles.panelScroll}
         contentContainerStyle={styles.reservationList}
+        overScrollMode="always"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[Colors.primary]}
+            progressBackgroundColor={Colors.surfaceElevated}
+            tintColor={Colors.primary}
+            title="Refreshing bookings…"
+          />
+        }
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListEmptyComponent={
           <View style={styles.emptyState}>
@@ -297,10 +320,14 @@ function GuestReservationsPanel({
 function DiningTablesPanel({
   tables,
   canCreate,
+  refreshing,
+  onRefresh,
   onEdit,
 }: {
   tables: DiningTable[];
   canCreate: boolean;
+  refreshing: boolean;
+  onRefresh: () => void;
   onEdit: (table: DiningTable) => void;
 }) {
   return (
@@ -308,6 +335,17 @@ function DiningTablesPanel({
       style={styles.panelScroll}
       contentContainerStyle={styles.tablesContent}
       showsVerticalScrollIndicator={false}
+      overScrollMode="always"
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={[Colors.primary]}
+          progressBackgroundColor={Colors.surfaceElevated}
+          tintColor={Colors.primary}
+          title="Refreshing tables…"
+        />
+      }
     >
       <View style={styles.tableSectionHeader}>
         <Text style={styles.sectionLabel}>DINING TABLES</Text>
@@ -419,6 +457,7 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     paddingBottom: 32,
     gap: 12,
+    flexGrow: 1,
   },
   tableSectionHeader: {
     gap: 3,
