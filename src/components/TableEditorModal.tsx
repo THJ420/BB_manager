@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { newDiningTableId } from '../lib/ids';
 import { DiningTable } from '../types';
 import { ActionButton } from './ActionButton';
@@ -12,6 +12,9 @@ export interface TableEditorModalProps {
   branchId: string;
   onClose: () => void;
   onSave: (table: DiningTable) => void;
+  /** Managers and kitchen leads may delete, per tables.deleteRule. */
+  canDelete?: boolean;
+  onDelete?: () => void;
 }
 
 export function TableEditorModal({
@@ -20,6 +23,8 @@ export function TableEditorModal({
   branchId,
   onClose,
   onSave,
+  canDelete = false,
+  onDelete,
 }: TableEditorModalProps) {
   const [name, setName] = useState('');
   const [capacity, setCapacity] = useState('4');
@@ -103,6 +108,18 @@ export function TableEditorModal({
         errorText={capacityError ?? undefined}
         testID="input_table_capacity"
       />
+
+      {canDelete && onDelete ? (
+        <>
+          <View style={styles.divider} />
+          <ActionButton
+            label="DELETE TABLE"
+            variant="danger"
+            onPress={onDelete}
+            testID="table_delete"
+          />
+        </>
+      ) : null}
     </ModalShell>
   );
 }
@@ -110,5 +127,9 @@ export function TableEditorModal({
 const styles = StyleSheet.create({
   footerButton: {
     flex: 1,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#333333',
   },
 });

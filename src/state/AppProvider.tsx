@@ -41,6 +41,7 @@ import {
   assignedBranchId,
   canCreateMenuItems,
   canDeleteMenuItems,
+  canDeleteTables,
 } from '../services/branchScope';
 import { startRealtime } from '../services/realtime';
 import { flushOutbox, SyncFailure } from '../services/sync';
@@ -102,6 +103,7 @@ interface AppContextValue {
   saveMenuItem: (item: MenuItem) => Promise<void>;
   deleteMenuItem: (itemId: string) => Promise<void>;
   saveTable: (table: DiningTable) => Promise<void>;
+  deleteTable: (tableId: string) => Promise<void>;
   updateReservationStatus: (
     reservationId: string,
     status: ReservationStatus
@@ -627,6 +629,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [enqueue]
   );
 
+  const deleteTable = useCallback(
+    async (tableId: string): Promise<void> => {
+      const table = stateRef.current.tables.find((entry) => entry.id === tableId);
+      const role = stateRef.current.session?.role ?? '';
+      if (!canDeleteTables(role)) {
+        console.error(
+          `[tables] role "${role || 'unknown'}" cannot delete dining tables — action not queued.`
+        );
+        return;
+      }
+      dispatch({ type: 'REMOVE_TABLE', tableId });
+      await enqueue('DELETE_TABLE', `Table ${table?.name ?? tableId} deleted`, {
+        tableId,
+        branchId: stateRef.current.activeBranch.id,
+      });
+    },
+    [enqueue]
+  );
+
   const updateReservationStatus = useCallback(
     async (reservationId: string, status: ReservationStatus): Promise<void> => {
       dispatch({ type: 'UPDATE_RESERVATION_STATUS', reservationId, status });
@@ -1007,6 +1028,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       saveMenuItem,
       deleteMenuItem,
       saveTable,
+      deleteTable,
       updateReservationStatus,
       toggleStoreOpen,
       setSlotInterval,
@@ -1030,6 +1052,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       saveMenuItem,
       deleteMenuItem,
       saveTable,
+      deleteTable,
       updateReservationStatus,
       toggleStoreOpen,
       setSlotInterval,

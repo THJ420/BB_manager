@@ -15,12 +15,14 @@ import { ReservationCard } from '../../components/ReservationCard';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { TableCard } from '../../components/TableCard';
 import { TableEditorModal } from '../../components/TableEditorModal';
+import { DialogModal } from '../../components/DialogModal';
 import {
   filterReservations,
   reservationFilterOptions,
   ReservationFilter,
 } from '../../lib/domain';
 import { useApp } from '../../state/AppProvider';
+import { canDeleteTables } from '../../services/branchScope';
 import { Colors, Layout, Radius, Spacing } from '../../theme/colors';
 import { DiningTable, Reservation, ReservationStatus } from '../../types';
 
@@ -31,11 +33,14 @@ export default function DiningTablesScreen() {
     state,
     toggleAcceptingReservations,
     saveTable,
+    deleteTable,
     updateReservationStatus,
   } = useApp();
+  const canDelete = canDeleteTables(state.session?.role ?? '');
   const [viewMode, setViewMode] = useState<ViewMode>('reservations');
   const [editorVisible, setEditorVisible] = useState(false);
   const [editingTable, setEditingTable] = useState<DiningTable | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DiningTable | null>(null);
   const transition = useRef(new Animated.Value(1)).current;
   const transitioning = useRef(false);
 
@@ -200,6 +205,36 @@ export default function DiningTablesScreen() {
           setEditingTable(null);
         }}
         onSave={(table) => void saveTable(table)}
+        canDelete={editingTable !== null && canDelete}
+        onDelete={() => {
+          if (!editingTable) return;
+          setDeleteTarget(editingTable);
+          setEditorVisible(false);
+          setEditingTable(null);
+        }}
+      />
+
+      <DialogModal
+        visible={deleteTarget !== null}
+        title="Delete Dining Table"
+        message={
+          deleteTarget
+            ? `Remove “${deleteTarget.name}” from the floor plan and the website?`
+            : ''
+        }
+        onRequestClose={() => setDeleteTarget(null)}
+        actions={[
+          { label: 'Cancel', variant: 'outline', onPress: () => setDeleteTarget(null) },
+          {
+            label: 'Delete',
+            variant: 'danger',
+            onPress: () => {
+              const target = deleteTarget;
+              setDeleteTarget(null);
+              if (target) void deleteTable(target.id);
+            },
+          },
+        ]}
       />
     </SafeAreaView>
   );

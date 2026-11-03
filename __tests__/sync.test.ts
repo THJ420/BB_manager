@@ -321,6 +321,30 @@ describe('sync outbox handlers', () => {
     expect(result.failures[0].error.kind).toBe('forbidden');
   });
 
+  it('deletes a dining table through PocketBase', async () => {
+    const remove = jest.fn(async () => undefined);
+    useCollection('tables', { delete: remove });
+
+    const result = await flushOutbox([
+      entry('DELETE_TABLE', { tableId: 't_01', branchId: 'branch_dt_01' }),
+    ]);
+
+    expect(result.failedIds).toEqual([]);
+    expect(remove).toHaveBeenCalledWith('t_01');
+  });
+
+  it('refuses a queued table delete that names another branch', async () => {
+    const remove = jest.fn(async () => undefined);
+    useCollection('tables', { delete: remove });
+
+    const result = await flushOutbox([
+      entry('DELETE_TABLE', { tableId: 't_01', branchId: 'branch_ub_02' }),
+    ]);
+
+    expect(remove).not.toHaveBeenCalled();
+    expect(result.failures[0].error.kind).toBe('forbidden');
+  });
+
   it('stamps the authenticated branch onto a menu stock toggle', async () => {
     const update = jest.fn(async () => undefined);
     useCollection('menu_items', { update });

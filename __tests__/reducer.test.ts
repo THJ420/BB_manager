@@ -277,4 +277,12 @@ describe('appReducer', () => {
     expect(next.menuItems).toHaveLength(seeded.menuItems.length - 1);
     expect(next.menuItems.find((item) => item.id === victim.id)).toBeUndefined();
   });
+  it('removes a deleted dining table from local state', () => {
+    const seeded = hydratedState();
+    const victim = seeded.tables[0];
+    const next = appReducer(seeded, { type: 'REMOVE_TABLE', tableId: victim.id });
+
+    expect(next.tables).toHaveLength(seeded.tables.length - 1);
+    expect(next.tables.find((table) => table.id === victim.id)).toBeUndefined();
+  });
 });

@@ -72,6 +72,7 @@ export type AppAction =
   | { type: 'SET_MENU_PRICE'; itemId: string; price: number; at: string }
   | { type: 'SET_TABLES'; tables: DiningTable[] }
   | { type: 'SAVE_TABLE'; table: DiningTable }
+  | { type: 'REMOVE_TABLE'; tableId: string }
   | { type: 'SET_RESERVATIONS'; reservations: Reservation[] }
   | { type: 'UPSERT_RESERVATION'; reservation: Reservation }
   | { type: 'UPDATE_RESERVATION_STATUS'; reservationId: string; status: ReservationStatus }
@@ -240,6 +241,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case 'SET_TABLES':
       return { ...state, tables: action.tables };
+
+    case 'REMOVE_TABLE':
+      return {
+        ...state,
+        tables: state.tables.filter((table) => table.id !== action.tableId),
+      };
 
     case 'SAVE_TABLE': {
       const exists = state.tables.some((table) => table.id === action.table.id);

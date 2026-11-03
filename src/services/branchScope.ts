@@ -119,6 +119,11 @@ export function canDeleteMenuItems(role: string): boolean {
   return role === 'manager' || role === 'kitchen_lead';
 }
 
+/** Mirrors `tables.deleteRule`: managers and kitchen leads may remove tables. */
+export function canDeleteTables(role: string): boolean {
+  return role === 'manager' || role === 'kitchen_lead';
+}
+
 /** Mirrors `pb_hooks/guards.pb.js`: only managers may rename/recategorise items. */
 export function canEditMenuDetails(role: string): boolean {
   return role === 'manager';

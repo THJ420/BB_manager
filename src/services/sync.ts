@@ -66,6 +66,7 @@ const ACTION_TARGETS: Record<
   UPDATE_MENU_ITEM: { collection: COLLECTIONS.menuItems, nestedKey: 'item' },
   DELETE_MENU_ITEM: { collection: COLLECTIONS.menuItems, idKey: 'itemId' },
   SAVE_TABLE: { collection: COLLECTIONS.tables, nestedKey: 'table' },
+  DELETE_TABLE: { collection: COLLECTIONS.tables, idKey: 'tableId' },
   UPDATE_RESERVATION_STATUS: {
     collection: COLLECTIONS.reservations,
     idKey: 'reservationId',
@@ -318,6 +319,16 @@ async function applyOutboxEntry(entry: OutboxEntry): Promise<void> {
       const table = entry.payload.table as DiningTable | undefined;
       if (!table) return;
       await saveTableRecord(table);
+      return;
+    }
+    case 'DELETE_TABLE': {
+      const tableId = String(entry.payload.tableId ?? '');
+      if (!tableId) return;
+      assertBranchScope(
+        entry.payload.branchId ? String(entry.payload.branchId) : undefined
+      );
+      console.log(`[payload] tables delete ${tableId}`);
+      await pb.collection(COLLECTIONS.tables).delete(tableId);
       return;
     }
     case 'UPDATE_RESERVATION_STATUS': {
