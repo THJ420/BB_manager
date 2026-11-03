@@ -1,0 +1,294 @@
+import { pb, isPocketBaseConfigured } from './pocketbase';
+import { COLLECTIONS } from './collections';
+import { assertBranchScope, scopeWritePayload } from './branchScope';
+import { isDuplicateRecordError, isNotFoundError } from './errors';
+import { buildMenuItemWritePayload } from './uploads';
+import {
+  toBranchSettingsRecord,
+  toOrderRecord,
+  toStoreRecord,
+  toTableRecord,
+} from './mappers';
+import {
+  DiningTable,
+  MenuItem,
+  Order,
+  OutboxActionType,
+  OutboxEntry,
+  StoreOperationsConfig,
+  TerminalSettings,
+} from '../types';
+
+export interface FlushResult {
+  syncedIds: string[];
+  failedIds: string[];
+  syncedTypes: OutboxActionType[];
+}
+
+const DEMO_SYNC_DELAY_MS = 450;
+
+function withRecordId(
+  payload: Record<string, unknown> | FormData,
+  id: string
+): Record<string, unknown> | FormData {
+  if (payload instanceof FormData) {
+    payload.append('id', id);
+    return payload;
+  }
+  return { id, ...payload };
+}
+
+async function createOrUpdateRecord(
+  collection: string,
+  id: string,
+  payload: Record<string, unknown>
+): Promise<void> {
+  try {
+    await pb
+      .collection(collection)
+      .create(withRecordId(scopeWritePayload(collection, payload, 'create'), id));
+  } catch (error) {
+    if (!isDuplicateRecordError(error)) throw error;
+    // A previous request created the record but its response was lost.
+    await pb
+      .collection(collection)
+      .update(id, scopeWritePayload(collection, payload, 'update'));
+  }
+}
+
+async function upsertBranchSettings(
+  branchId: string,
+  payload: Record<string, unknown>,
+  createDefaults: Record<string, unknown> = {}
+): Promise<void> {
+  const scopedBranchId = assertBranchScope(branchId);
+  const scopedPayload = scopeWritePayload(
+    COLLECTIONS.branchSettings,
+    payload,
+    'update'
+  );
+  const createFields = scopeWritePayload(
+    COLLECTIONS.branchSettings,
+    { ...createDefaults, ...scopedPayload },
+    'create'
+  );
+
+  try {
+    const existing = await pb
+      .collection(COLLECTIONS.branchSettings)
+      .getFirstListItem(pb.filter('branch_id = {:branchId}', { branchId: scopedBranchId }));
+    await pb.collection(COLLECTIONS.branchSettings).update(existing.id, scopedPayload);
+  } catch (error) {
+    if (!isNotFoundError(error)) throw error;
+    await pb.collection(COLLECTIONS.branchSettings).create(createFields);
+  }
+}
+
+/**
+ * Menu writes may be multipart when a local photo is attached; a FormData body
+ * already carries the scoped `branch_id` from the record it was built from.
+ */
+async function menuWritePayload(
+  item: MenuItem,
+  mode: 'create' | 'update',
+  removeImage: boolean
+): Promise<Record<string, unknown> | FormData> {
+  const scopedItem: MenuItem = { ...item, branchId: assertBranchScope(item.branchId) };
+  const payload = await buildMenuItemWritePayload(scopedItem, { clearImage: removeImage });
+  return payload instanceof FormData
+    ? payload
+    : scopeWritePayload(COLLECTIONS.menuItems, payload, mode);
+}
+
+async function saveMenuRecord(
+  item: MenuItem,
+  mode: 'create' | 'update',
+  removeImage = false
+): Promise<void> {
+  if (mode === 'create') {
+    try {
+      const payload = await menuWritePayload(item, 'create', removeImage);
+      await pb
+        .collection(COLLECTIONS.menuItems)
+        .create(withRecordId(payload, item.id));
+    } catch (error) {
+      if (!isDuplicateRecordError(error)) throw error;
+      // The record was created by an earlier request whose response was lost.
+      // Rebuild the multipart payload so the image stream is fresh.
+      const retryPayload = await menuWritePayload(item, 'update', removeImage);
+      await pb.collection(COLLECTIONS.menuItems).update(item.id, retryPayload);
+    }
+    return;
+  }
+
+  const payload = await menuWritePayload(item, 'update', removeImage);
+  await pb.collection(COLLECTIONS.menuItems).update(item.id, payload);
+}
+
+async function saveTableRecord(table: DiningTable): Promise<void> {
+  const payload = scopeWritePayload(
+    COLLECTIONS.tables,
+    toTableRecord(table),
+    'update'
+  );
+  try {
+    await pb.collection(COLLECTIONS.tables).update(table.id, payload);
+  } catch (error) {
+    if (!isNotFoundError(error)) throw error;
+    await pb
+      .collection(COLLECTIONS.tables)
+      .create(withRecordId(scopeWritePayload(COLLECTIONS.tables, toTableRecord(table), 'create'), table.id));
+  }
+}
+
+async function applyOutboxEntry(entry: OutboxEntry): Promise<void> {
+  switch (entry.actionType) {
+    case 'UPDATE_ORDER_STATUS': {
+      const orderId = String(entry.payload.orderId ?? '');
+      const status = String(entry.payload.status ?? '');
+      const at = String(entry.payload.at ?? new Date().toISOString());
+      if (!orderId || !status) return;
+      const patch: Record<string, unknown> = { status };
+      if (status === 'ready') patch.ready_at = at;
+      if (status === 'completed') patch.completed_at = at;
+      await pb
+        .collection(COLLECTIONS.orders)
+        .update(orderId, scopeWritePayload(COLLECTIONS.orders, patch, 'update'));
+      return;
+    }
+    case 'CREATE_ORDER': {
+      const order = entry.payload.order as Order | undefined;
+      if (!order) return;
+      await createOrUpdateRecord(
+        COLLECTIONS.orders,
+        order.id,
+        toOrderRecord({ ...order, branchId: assertBranchScope(order.branchId) })
+      );
+      return;
+    }
+    case 'TOGGLE_MENU_STOCK': {
+      const itemId = String(entry.payload.itemId ?? '');
+      if (!itemId) return;
+      await pb.collection(COLLECTIONS.menuItems).update(
+        itemId,
+        scopeWritePayload(
+          COLLECTIONS.menuItems,
+          { in_stock: Boolean(entry.payload.inStock) },
+          'update'
+        )
+      );
+      return;
+    }
+    case 'UPDATE_MENU_PRICE': {
+      const itemId = String(entry.payload.itemId ?? '');
+      if (!itemId) return;
+      await pb.collection(COLLECTIONS.menuItems).update(
+        itemId,
+        scopeWritePayload(
+          COLLECTIONS.menuItems,
+          { price: Number(entry.payload.price ?? 0) },
+          'update'
+        )
+      );
+      return;
+    }
+    case 'CREATE_MENU_ITEM': {
+      const item = entry.payload.item as MenuItem | undefined;
+      if (!item) return;
+      await saveMenuRecord(item, 'create', entry.payload.imageRemoved === true);
+      return;
+    }
+    case 'UPDATE_MENU_ITEM': {
+      const item = entry.payload.item as MenuItem | undefined;
+      if (!item) return;
+      await saveMenuRecord(item, 'update', entry.payload.imageRemoved === true);
+      return;
+    }
+    case 'SAVE_TABLE': {
+      const table = entry.payload.table as DiningTable | undefined;
+      if (!table) return;
+      await saveTableRecord(table);
+      return;
+    }
+    case 'UPDATE_RESERVATION_STATUS': {
+      const reservationId = String(entry.payload.reservationId ?? '');
+      if (!reservationId) return;
+      await pb.collection(COLLECTIONS.reservations).update(
+        reservationId,
+        scopeWritePayload(
+          COLLECTIONS.reservations,
+          { status: String(entry.payload.status ?? '') },
+          'update'
+        )
+      );
+      return;
+    }
+    case 'UPDATE_STORE_HOURS': {
+      const config = entry.payload.config as StoreOperationsConfig | undefined;
+      const branchId = String(entry.payload.branchId ?? '');
+      if (!config || !branchId) return;
+      // The paired settings snapshot lets a missing branch_settings row be
+      // created with the terminal's current configuration instead of a
+      // half-populated defaults record.
+      const settingsSnapshot = entry.payload.settings as TerminalSettings | undefined;
+      await upsertBranchSettings(
+        branchId,
+        toStoreRecord(config),
+        settingsSnapshot ? toBranchSettingsRecord(settingsSnapshot) : {}
+      );
+      return;
+    }
+    case 'UPDATE_SETTINGS': {
+      const settings = entry.payload.settings as TerminalSettings | undefined;
+      const branchId = String(
+        entry.payload.branchId ?? settings?.pocketbaseBranchId ?? ''
+      );
+      if (!settings || !branchId) return;
+      const configSnapshot = entry.payload.config as StoreOperationsConfig | undefined;
+      await upsertBranchSettings(
+        branchId,
+        toBranchSettingsRecord(settings),
+        configSnapshot ? toStoreRecord(configSnapshot) : {}
+      );
+      return;
+    }
+    default:
+      return;
+  }
+}
+
+/**
+ * Delivers queued offline mutations in order. A failed entry stays queued so the
+ * terminal can retry; successful entries are safe to mark as synced.
+ */
+export async function flushOutbox(entries: OutboxEntry[]): Promise<FlushResult> {
+  if (entries.length === 0) {
+    return { syncedIds: [], failedIds: [], syncedTypes: [] };
+  }
+
+  if (!isPocketBaseConfigured) {
+    await new Promise((resolve) => setTimeout(resolve, DEMO_SYNC_DELAY_MS));
+    return {
+      syncedIds: entries.map((entry) => entry.id),
+      failedIds: [],
+      syncedTypes: entries.map((entry) => entry.actionType),
+    };
+  }
+
+  const syncedIds: string[] = [];
+  const failedIds: string[] = [];
+  const syncedTypes: OutboxActionType[] = [];
+
+  for (const entry of entries) {
+    try {
+      await applyOutboxEntry(entry);
+      syncedIds.push(entry.id);
+      syncedTypes.push(entry.actionType);
+    } catch (error) {
+      console.warn(`Outbox entry ${entry.id} failed to sync`, error);
+      failedIds.push(entry.id);
+    }
+  }
+
+  return { syncedIds, failedIds, syncedTypes };
+}

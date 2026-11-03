@@ -1,0 +1,6 @@
+{
+  "name": "BB Manager",
+  "description": "Employee-facing dashboard for multi-branch restaurant local pickup and menu management with live order tracking and stock control.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

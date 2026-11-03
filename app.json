@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "BB Manager",
+    "slug": "bb-manager",
+    "version": "1.2.0",
+    "orientation": "default",
+    "scheme": "bbmanager",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#121212",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#121212"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.bbmanager.app"
+    },
+    "android": {
+      "package": "com.bbmanager.app",
+      "edgeToEdgeEnabled": true,
+      "permissions": ["INTERNET", "CAMERA"]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-sqlite",
+        {
+          "enableFTS": true,
+          "useSQLCipher": false
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundRecording": false,
+          "enableBackgroundPlayback": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "BB Manager uses your photo library to attach dish photos to menu items.",
+          "cameraPermission": "BB Manager uses the camera to capture dish photos for the menu.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-dev-client",
+        {
+          "launcherMode": "default"
+        }
+      ]
+    ]
+  }
+}

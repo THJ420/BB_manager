@@ -1,0 +1,1164 @@
+import { useRouter } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActionButton } from '../../components/ActionButton';
+import { AlertTonePickerModal } from '../../components/AlertTonePickerModal';
+import { ConnectionBadge } from '../../components/ConnectionBadge';
+import { DialogModal } from '../../components/DialogModal';
+import { ScreenHeader } from '../../components/ScreenHeader';
+import { SectionCard } from '../../components/SectionCard';
+import { SwitchRow } from '../../components/SwitchRow';
+import { TextField } from '../../components/TextField';
+import { WeeklyHoursModal } from '../../components/WeeklyHoursModal';
+import { BRANCHES } from '../../constants/branches';
+import { getAlertTone } from '../../lib/alertTones';
+import { storeHoursSummary } from '../../lib/domain';
+import { initials, roleLabel } from '../../lib/format';
+import { useApp } from '../../state/AppProvider';
+import { Colors, Radius, Spacing } from '../../theme/colors';
+import {
+  AlertToneId,
+  Branch,
+  ConnectionStatus,
+  NotificationSettings,
+  SmtpEncryption,
+  SmtpSettings,
+  StaffRole,
+  TerminalSettings,
+} from '../../types';
+
+const CONNECTION_MODES: Array<{ id: ConnectionStatus; label: string }> = [
+  { id: 'live', label: 'SSE LIVE' },
+  { id: 'polling', label: 'POLL' },
+  { id: 'offline', label: 'OFFLINE' },
+];
+
+const ROLE_LABELS: Record<StaffRole, string> = {
+  manager: 'MANAGER',
+  kitchen_lead: 'KITCHEN LEAD',
+  floor_staff: 'FLOOR STAFF',
+};
+
+const STAFF_ROLES: StaffRole[] = ['floor_staff', 'kitchen_lead', 'manager'];
+
+export default function TerminalSettingsScreen() {
+  const router = useRouter();
+  const {
+    state,
+    isLiveBackend,
+    logout,
+    toggleStoreOpen,
+    setSlotInterval,
+    updateWeeklySchedule,
+    saveTerminalSettings,
+    syncOutboxNow,
+    setConnectionStatus,
+    setBranch,
+  } = useApp();
+
+  const [draft, setDraft] = useState<TerminalSettings>(state.settings);
+  const [weeklyVisible, setWeeklyVisible] = useState(false);
+  const [tonePickerVisible, setTonePickerVisible] = useState(false);
+  const [savedVisible, setSavedVisible] = useState(false);
+  const [logoutVisible, setLogoutVisible] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const [recipientInput, setRecipientInput] = useState('');
+  const [newStaffName, setNewStaffName] = useState('');
+  const [newStaffEmail, setNewStaffEmail] = useState('');
+  const [newStaffPassword, setNewStaffPassword] = useState('');
+  const [newStaffRole, setNewStaffRole] = useState<StaffRole>('floor_staff');
+  const [staffError, setStaffError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraft(state.settings);
+  }, [state.settings]);
+
+  const session = state.session;
+  const storeOpen = state.storeConfig.isOpenForOrders;
+  const pendingCount = state.outbox.length;
+
+  const updateSmtp = (patch: Partial<SmtpSettings>) => {
+    setDraft((current) => ({ ...current, smtp: { ...current.smtp, ...patch } }));
+  };
+
+  const updateNotifications = (patch: Partial<NotificationSettings>) => {
+    setDraft((current) => ({
+      ...current,
+      notifications: { ...current.notifications, ...patch },
+    }));
+  };
+
+  const persistSoundSettings = (patch: {
+    alertToneId?: AlertToneId;
+    soundAlertsEnabled?: boolean;
+  }) => {
+    const next = { ...draft, ...patch };
+    setDraft(next);
+    void saveTerminalSettings(next);
+  };
+
+  const selectedTone = getAlertTone(draft.alertToneId);
+
+  const updateDelivery = (
+    key: keyof TerminalSettings['deliveryUrls'],
+    value: string
+  ) => {
+    setDraft((current) => ({
+      ...current,
+      deliveryUrls: { ...current.deliveryUrls, [key]: value },
+    }));
+  };
+
+  const addRecipient = () => {
+    const value = recipientInput.trim();
+    if (!value) return;
+    if (draft.notifications.recipients.includes(value)) {
+      setRecipientInput('');
+      return;
+    }
+    updateNotifications({
+      recipients: [...draft.notifications.recipients, value],
+    });
+    setRecipientInput('');
+  };
+
+  const removeRecipient = (email: string) => {
+    updateNotifications({
+      recipients: draft.notifications.recipients.filter((entry) => entry !== email),
+    });
+  };
+
+  const addStaffMember = () => {
+    if (!newStaffName.trim() || !newStaffEmail.trim()) {
+      setStaffError('Provide a staff name and email address.');
+      return;
+    }
+    setDraft((current) => ({
+      ...current,
+      staff: [
+        ...current.staff,
+        {
+          id: `staff_${Date.now()}`,
+          name: newStaffName.trim(),
+          email: newStaffEmail.trim(),
+          role: newStaffRole,
+        },
+      ],
+    }));
+    setNewStaffName('');
+    setNewStaffEmail('');
+    setNewStaffPassword('');
+    setStaffError(null);
+  };
+
+  const removeStaffMember = (staffId: string) => {
+    if (draft.staff.length <= 1) return;
+    setDraft((current) => ({
+      ...current,
+      staff: current.staff.filter((member) => member.id !== staffId),
+    }));
+  };
+
+  const handleBranchSwitch = async (branch: Branch) => {
+    await setBranch(branch);
+  };
+
+  const handleSave = async () => {
+    await saveTerminalSettings({
+      ...draft,
+      branchName: draft.branchName.trim() || state.activeBranch.name,
+    });
+    setSavedVisible(true);
+  };
+
+  const handleSync = async () => {
+    if (pendingCount === 0 || isSyncing) return;
+    setIsSyncing(true);
+    try {
+      await syncOutboxNow();
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    router.replace('/login');
+  };
+
+  const outboxTone = useMemo(
+    () => (pendingCount > 0 ? Colors.warning : Colors.success),
+    [pendingCount]
+  );
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <ScreenHeader
+        title="Terminal Settings"
+        subtitle={`${state.activeBranch.name} • ${state.activeBranch.code}`}
+        right={
+          <ConnectionBadge status={state.connection} pendingOutboxCount={pendingCount} />
+        }
+      />
+
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <SectionCard title="STAFF SESSION">
+          <View style={styles.profileRow}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initials(session?.name ?? 'BB')}</Text>
+            </View>
+            <View style={styles.profileText}>
+              <Text style={styles.userName}>{session?.name ?? 'Alex Vance'}</Text>
+              <Text style={styles.userRole}>
+                {session ? roleLabel(session.role) : 'Store Operations Lead'}
+              </Text>
+              <Text style={styles.userEmail}>
+                {session?.email ?? 'manager@bbmanager.internal'}
+              </Text>
+            </View>
+          </View>
+        </SectionCard>
+
+        <SectionCard
+          title="STORE OPERATIONS & WORKING HOURS"
+          tone={storeOpen ? 'default' : 'danger'}
+          right={
+            <View
+              style={[
+                styles.statusPill,
+                { backgroundColor: storeOpen ? Colors.successMuted : Colors.errorMuted },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.statusPillText,
+                  { color: storeOpen ? Colors.success : Colors.error },
+                ]}
+              >
+                {storeOpen ? 'OPEN FOR ORDERS' : 'SHOP CLOSED'}
+              </Text>
+            </View>
+          }
+        >
+          <Text style={styles.bodyText}>
+            Control real-time availability across the web checkout and pickup portals. Turning
+            store operations off immediately suspends incoming online pickups and table bookings.
+          </Text>
+
+          <View style={styles.masterBox}>
+            <SwitchRow
+              title="Master Order Reception Switch"
+              subtitle={
+                storeOpen
+                  ? 'Accepting digital pickups and bookings'
+                  : 'Emergency pause: web orders disabled'
+              }
+              value={storeOpen}
+              onValueChange={(value) => void toggleStoreOpen(value)}
+              activeColor={Colors.success}
+              activeMuted={Colors.successMuted}
+              inactiveColor={Colors.error}
+              inactiveMuted={Colors.errorMuted}
+              testID="master_reception_switch"
+            />
+          </View>
+
+          <View style={styles.divider} />
+
+          <Text style={styles.subLabel}>DAILY OPERATING SCHEDULE</Text>
+          <ActionButton
+            label="🗓️  Manage Weekly Operating Hours"
+            variant="primary"
+            fullWidth
+            onPress={() => setWeeklyVisible(true)}
+            testID="btn_manage_weekly_hours"
+          />
+          <Text style={styles.hintText}>{storeHoursSummary(state.storeConfig)}</Text>
+
+          <Text style={styles.subLabel}>PICKUP SLOT INTERVALS</Text>
+          <View style={styles.slotRow}>
+            {[15, 30, 45, 60].map((minutes) => {
+              const selected = state.storeConfig.slotIntervalMinutes === minutes;
+              return (
+                <Pressable
+                  key={minutes}
+                  onPress={() => void setSlotInterval(minutes)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  style={[
+                    styles.slotChip,
+                    selected ? styles.slotChipSelected : styles.slotChipIdle,
+                  ]}
+                >
+                  <Text style={[styles.slotText, selected && styles.slotTextSelected]}>
+                    {minutes}m
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </SectionCard>
+
+        <SectionCard title="SYNC & DATA HEALTH">
+          <Text style={styles.rowTitle}>Connection Protocol</Text>
+          <View style={styles.segmentTrack}>
+            {CONNECTION_MODES.map((mode) => {
+              const selected = state.connection === mode.id;
+              return (
+                <Pressable
+                  key={mode.id}
+                  onPress={() => setConnectionStatus(mode.id)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  style={[styles.segment, selected && styles.segmentSelected]}
+                >
+                  <Text
+                    style={[styles.segmentText, selected && styles.segmentTextSelected]}
+                    numberOfLines={1}
+                  >
+                    {mode.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.outboxRow}>
+            <View style={styles.outboxText}>
+              <Text style={styles.rowTitle}>Offline Outbox Queue</Text>
+              <Text style={[styles.rowSubtitle, { color: outboxTone }]}>
+                {pendingCount === 0
+                  ? 'All actions synced to the cloud'
+                  : `${pendingCount} pending mutations`}
+              </Text>
+            </View>
+            <ActionButton
+              label={isSyncing ? 'SYNCING…' : 'SYNC NOW'}
+              variant="warning"
+              disabled={pendingCount === 0 || isSyncing}
+              onPress={() => void handleSync()}
+              testID="btn_sync_outbox"
+            />
+          </View>
+
+          <View style={styles.divider} />
+
+          <SwitchRow
+            title="Audible New Ticket Chime"
+            subtitle={
+              draft.soundAlertsEnabled
+                ? `Plays “${selectedTone.label}” for incoming tickets`
+                : 'Muted: incoming orders stay silent'
+            }
+            value={draft.soundAlertsEnabled}
+            onValueChange={(enabled) => persistSoundSettings({ soundAlertsEnabled: enabled })}
+            activeColor={Colors.primary}
+            activeMuted={Colors.primaryMuted}
+            inactiveColor={Colors.textSecondary}
+            testID="sound_alerts_switch"
+          />
+
+          <View style={styles.divider} />
+
+          <View style={styles.alertToneRow}>
+            <View style={styles.alertToneText}>
+              <Text style={styles.rowTitle}>Order Alert Tone</Text>
+              <Text style={styles.rowSubtitle}>
+                {selectedTone.label} • {selectedTone.description}
+              </Text>
+            </View>
+            <ActionButton
+              label="CHOOSE"
+              variant="subtle"
+              compact
+              onPress={() => setTonePickerVisible(true)}
+              testID="btn_choose_alert_tone"
+            />
+          </View>
+          <Text style={styles.hintText}>
+            Preview any preset in the picker. The selected tone saves immediately for this
+            terminal.
+          </Text>
+        </SectionCard>
+
+        <SectionCard title="SMTP EMAIL CONFIGURATION">
+          <Text style={styles.bodyText}>
+            Placeholders for the outgoing mail server used by dispatch receipts, customer
+            notifications and kitchen incident reports.
+          </Text>
+
+          <TextField
+            label="SMTP Host"
+            value={draft.smtp.host}
+            onChangeText={(host) => updateSmtp({ host })}
+            placeholder="smtp.mailgun.org"
+            autoCapitalize="none"
+            testID="settings_smtp_host"
+          />
+
+          <View style={styles.fieldRow}>
+            <TextField
+              label="Port"
+              value={draft.smtp.port}
+              onChangeText={(port) => updateSmtp({ port: port.replace(/[^0-9]/g, '') })}
+              keyboardType="number-pad"
+              placeholder="587"
+              style={styles.portField}
+            />
+            <View style={styles.encryptionGroup}>
+              <Text style={styles.subLabel}>Encryption</Text>
+              <View style={styles.encryptionRow}>
+                {(['TLS', 'SSL', 'STARTTLS'] as SmtpEncryption[]).map((encryption) => {
+                  const selected = draft.smtp.encryption === encryption;
+                  return (
+                    <Pressable
+                      key={encryption}
+                      onPress={() => updateSmtp({ encryption })}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      style={[
+                        styles.encryptionChip,
+                        selected ? styles.encryptionChipSelected : styles.encryptionChipIdle,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.encryptionText,
+                          selected && styles.encryptionTextSelected,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {encryption}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+
+          <TextField
+            label="Username"
+            value={draft.smtp.username}
+            onChangeText={(username) => updateSmtp({ username })}
+            autoCapitalize="none"
+            placeholder="postmaster@bbmanager.com"
+          />
+
+          <TextField
+            label="Password"
+            value={draft.smtp.password}
+            onChangeText={(password) => updateSmtp({ password })}
+            secureTextEntry
+            autoCapitalize="none"
+            placeholder="••••••••••••"
+          />
+
+          <View style={styles.fieldRow}>
+            <TextField
+              label="From Email"
+              value={draft.smtp.fromEmail}
+              onChangeText={(fromEmail) => updateSmtp({ fromEmail })}
+              autoCapitalize="none"
+              style={styles.halfField}
+            />
+            <TextField
+              label="From Name"
+              value={draft.smtp.fromName}
+              onChangeText={(fromName) => updateSmtp({ fromName })}
+              style={styles.halfField}
+            />
+          </View>
+        </SectionCard>
+
+        <SectionCard title="NOTIFICATIONS">
+          <SwitchRow
+            title="Automated Dispatch Notifications"
+            subtitle={
+              draft.notifications.active
+                ? 'Active: dispatching order tickets and shift alerts'
+                : 'Suspended: no alerts dispatched'
+            }
+            value={draft.notifications.active}
+            onValueChange={(active) => updateNotifications({ active })}
+            activeColor={Colors.success}
+            activeMuted={Colors.successMuted}
+            inactiveColor={Colors.error}
+            inactiveMuted={Colors.errorMuted}
+          />
+
+          <View style={styles.divider} />
+
+          <Text style={styles.subLabel}>NOTIFICATION RECIPIENT LIST</Text>
+          <Text style={styles.bodyText}>
+            Email addresses receiving automated ticket summaries and floor incident webhooks.
+          </Text>
+
+          {draft.notifications.recipients.map((email) => (
+            <View key={email} style={styles.recipientRow}>
+              <Text style={styles.recipientText} numberOfLines={1}>
+                ✉️ {email}
+              </Text>
+              <Pressable
+                onPress={() => removeRecipient(email)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={`Remove ${email}`}
+                style={styles.removeTouch}
+              >
+                <Text style={styles.removeText}>✕</Text>
+              </Pressable>
+            </View>
+          ))}
+
+          <View style={styles.addRow}>
+            <TextField
+              value={recipientInput}
+              onChangeText={setRecipientInput}
+              placeholder="lead.chef@bbmanager.internal"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              style={styles.addField}
+            />
+            <ActionButton label="+ Add Tag" variant="primary" compact onPress={addRecipient} />
+          </View>
+        </SectionCard>
+
+        <SectionCard title="DELIVERY PLATFORMS & STOREFRONT URLS">
+          <Text style={styles.bodyText}>
+            Manage the integration endpoints and storefront links for third-party courier
+            channels.
+          </Text>
+
+          <TextField
+            label="🛵 Wolt Food Storefront URL"
+            value={draft.deliveryUrls.wolt}
+            onChangeText={(wolt) => updateDelivery('wolt', wolt)}
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+          <TextField
+            label="🌐 Direct Web Ordering Portal URL"
+            value={draft.deliveryUrls.web}
+            onChangeText={(web) => updateDelivery('web', web)}
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+          <TextField
+            label="📦 Glovo Storefront URL"
+            value={draft.deliveryUrls.glovo}
+            onChangeText={(glovo) => updateDelivery('glovo', glovo)}
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+          <TextField
+            label="🍽️ Pyszne.pl Storefront URL"
+            value={draft.deliveryUrls.pyszne}
+            onChangeText={(pyszne) => updateDelivery('pyszne', pyszne)}
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+          <TextField
+            label="🚗 Uber Eats Storefront URL"
+            value={draft.deliveryUrls.uberEats}
+            onChangeText={(uberEats) => updateDelivery('uberEats', uberEats)}
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+        </SectionCard>
+
+        <SectionCard title="BRANCH & STAFF ACCESS CONTROL">
+          <Text style={styles.bodyText}>
+            Manage local unit parameters, database mapping and restaurant employee permissions.
+          </Text>
+
+          <Text style={styles.subLabel}>BRANCH TERMINAL</Text>
+          <View style={styles.branchRow}>
+            {(isLiveBackend ? state.branches : BRANCHES).map((branch) => {
+              const selected = branch.id === state.activeBranch.id;
+              return (
+                <Pressable
+                  key={branch.id}
+                  onPress={() => void handleBranchSwitch(branch)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  style={[
+                    styles.branchChip,
+                    selected ? styles.branchChipSelected : styles.branchChipIdle,
+                  ]}
+                >
+                  <Text
+                    style={[styles.branchText, selected && styles.branchTextSelected]}
+                    numberOfLines={1}
+                  >
+                    {branch.code}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <TextField
+            label="Physical Branch Name"
+            value={draft.branchName}
+            onChangeText={(branchName) =>
+              setDraft((current) => ({ ...current, branchName }))
+            }
+          />
+
+          <TextField
+            label="PocketBase Branch ID"
+            value={draft.pocketbaseBranchId}
+            onChangeText={(pocketbaseBranchId) =>
+              setDraft((current) => ({ ...current, pocketbaseBranchId }))
+            }
+            autoCapitalize="none"
+          />
+
+          <View style={styles.divider} />
+
+          <Text style={styles.subLabel}>ACTIVE STAFF ROSTER</Text>
+          {draft.staff.map((member) => (
+            <View key={member.id} style={styles.staffRow}>
+              <View style={styles.staffAvatar}>
+                <Text style={styles.staffAvatarText}>{initials(member.name)}</Text>
+              </View>
+              <View style={styles.staffText}>
+                <Text style={styles.staffName} numberOfLines={1}>
+                  {member.name}
+                </Text>
+                <Text style={styles.staffEmail} numberOfLines={1}>
+                  {member.email}
+                </Text>
+              </View>
+              <View style={styles.rolePill}>
+                <Text style={styles.rolePillText}>{ROLE_LABELS[member.role]}</Text>
+              </View>
+              {draft.staff.length > 1 ? (
+                <Pressable
+                  onPress={() => removeStaffMember(member.id)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${member.name}`}
+                  style={styles.removeTouch}
+                >
+                  <Text style={styles.staffRemove}>✕</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ))}
+
+          <Text style={styles.subLabel}>REGISTER NEW STAFF MEMBER</Text>
+          <TextField
+            label="Full Name"
+            value={newStaffName}
+            onChangeText={(value) => {
+              setNewStaffName(value);
+              setStaffError(null);
+            }}
+            placeholder="e.g. Jamie Rivera"
+          />
+          <TextField
+            label="Staff Email"
+            value={newStaffEmail}
+            onChangeText={(value) => {
+              setNewStaffEmail(value);
+              setStaffError(null);
+            }}
+            placeholder="jamie@bbmanager.internal"
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+          <TextField
+            label="Temporary Password / PIN"
+            value={newStaffPassword}
+            onChangeText={setNewStaffPassword}
+            secureTextEntry
+            autoCapitalize="none"
+            placeholder="Temporary credential"
+          />
+
+          <View style={styles.roleRow}>
+            {STAFF_ROLES.map((role) => {
+              const selected = newStaffRole === role;
+              return (
+                <Pressable
+                  key={role}
+                  onPress={() => setNewStaffRole(role)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  style={[
+                    styles.roleChip,
+                    selected ? styles.roleChipSelected : styles.roleChipIdle,
+                  ]}
+                >
+                  <Text
+                    style={[styles.roleChipText, selected && styles.roleChipTextSelected]}
+                    numberOfLines={1}
+                  >
+                    {ROLE_LABELS[role]}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {staffError ? <Text style={styles.staffError}>{staffError}</Text> : null}
+
+          <ActionButton
+            label="+ Register Staff Member"
+            variant="primary"
+            fullWidth
+            onPress={addStaffMember}
+            testID="btn_register_staff"
+          />
+        </SectionCard>
+
+        <ActionButton
+          label="SIGN OUT OF TERMINAL"
+          variant="dangerOutline"
+          fullWidth
+          onPress={() => setLogoutVisible(true)}
+          testID="btn_logout"
+        />
+
+        <Text style={styles.version}>
+          BB Manager v1.2.0 • Store Operations Engine • PocketBase SSE Synchronized
+        </Text>
+      </ScrollView>
+
+      <View style={styles.saveBar}>
+        <ActionButton
+          label="💾  SAVE TERMINAL SETTINGS"
+          variant="primary"
+          fullWidth
+          onPress={() => void handleSave()}
+          testID="btn_sticky_save_settings"
+        />
+      </View>
+
+      <AlertTonePickerModal
+        visible={tonePickerVisible}
+        selectedToneId={draft.alertToneId}
+        onClose={() => setTonePickerVisible(false)}
+        onSave={(toneId) => {
+          setTonePickerVisible(false);
+          persistSoundSettings({ alertToneId: toneId });
+        }}
+      />
+
+      <WeeklyHoursModal
+        visible={weeklyVisible}
+        schedule={state.storeConfig.weeklySchedule}
+        onClose={() => setWeeklyVisible(false)}
+        onSave={(schedule) => void updateWeeklySchedule(schedule)}
+      />
+
+      <DialogModal
+        visible={savedVisible}
+        title="Settings Saved"
+        message="SMTP placeholders, audio alert preferences, notifications, delivery platform URLs and branch staff access were saved for this terminal."
+        actions={[{ label: 'Done', onPress: () => setSavedVisible(false) }]}
+        onRequestClose={() => setSavedVisible(false)}
+      />
+
+      <DialogModal
+        visible={logoutVisible}
+        title="Sign Out"
+        message="Are you sure you want to end your kitchen session?"
+        actions={[
+          { label: 'Cancel', variant: 'outline', onPress: () => setLogoutVisible(false) },
+          {
+            label: 'Sign Out',
+            variant: 'danger',
+            onPress: () => {
+              setLogoutVisible(false);
+              void handleLogout();
+            },
+          },
+        ]}
+        onRequestClose={() => setLogoutVisible(false)}
+      />
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  content: {
+    padding: Spacing.md,
+    paddingBottom: Spacing.lg,
+    gap: 12,
+  },
+  profileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  avatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: Colors.white,
+  },
+  profileText: {
+    flex: 1,
+    gap: 1,
+  },
+  userName: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: Colors.textPrimary,
+  },
+  userRole: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.primary,
+  },
+  userEmail: {
+    fontSize: 11,
+    color: Colors.textMuted,
+  },
+  statusPill: {
+    borderRadius: Radius.full,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  statusPillText: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.3,
+  },
+  bodyText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Colors.textSecondary,
+  },
+  masterBox: {
+    backgroundColor: Colors.surfaceHighlight,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.surfaceBorder,
+    paddingHorizontal: 12,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: Colors.surfaceBorder,
+  },
+  subLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
+    color: Colors.textMuted,
+  },
+  hintText: {
+    fontSize: 10,
+    color: Colors.textMuted,
+  },
+  slotRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  slotChip: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  slotChipIdle: {
+    backgroundColor: Colors.surfaceElevated,
+    borderColor: Colors.surfaceBorder,
+  },
+  slotChipSelected: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  slotText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: Colors.textSecondary,
+  },
+  slotTextSelected: {
+    color: Colors.white,
+  },
+  rowTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  rowSubtitle: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  alertToneRow: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  alertToneText: {
+    flex: 1,
+    gap: 2,
+  },
+  segmentTrack: {
+    flexDirection: 'row',
+    gap: 4,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    borderColor: Colors.surfaceBorder,
+    padding: 4,
+  },
+  segment: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: Radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  segmentSelected: {
+    backgroundColor: Colors.primary,
+  },
+  segmentText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: Colors.textMuted,
+  },
+  segmentTextSelected: {
+    color: Colors.white,
+  },
+  outboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  outboxText: {
+    flex: 1,
+    gap: 2,
+  },
+  fieldRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  portField: {
+    flex: 1,
+  },
+  halfField: {
+    flex: 1,
+  },
+  encryptionGroup: {
+    flex: 2,
+    gap: 6,
+  },
+  encryptionRow: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  encryptionChip: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  encryptionChipIdle: {
+    backgroundColor: Colors.surfaceElevated,
+    borderColor: Colors.surfaceBorder,
+  },
+  encryptionChipSelected: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  encryptionText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: Colors.textSecondary,
+  },
+  encryptionTextSelected: {
+    color: Colors.white,
+  },
+  recipientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    backgroundColor: Colors.surfaceHighlight,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    borderColor: Colors.surfaceBorder,
+    paddingLeft: 10,
+    paddingRight: 4,
+    minHeight: 44,
+  },
+  recipientText: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  removeTouch: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: Colors.textMuted,
+  },
+  addRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  addField: {
+    flex: 1,
+  },
+  branchRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  branchChip: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  branchChipIdle: {
+    backgroundColor: Colors.surfaceElevated,
+    borderColor: Colors.surfaceBorder,
+  },
+  branchChipSelected: {
+    backgroundColor: Colors.primaryMuted,
+    borderColor: Colors.primary,
+  },
+  branchText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: Colors.textMuted,
+  },
+  branchTextSelected: {
+    color: Colors.primary,
+  },
+  staffRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.surfaceHighlight,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.surfaceBorder,
+    padding: 8,
+  },
+  staffAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  staffAvatarText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: Colors.white,
+  },
+  staffText: {
+    flex: 1,
+    gap: 1,
+  },
+  staffName: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: Colors.textPrimary,
+  },
+  staffEmail: {
+    fontSize: 10,
+    color: Colors.textMuted,
+  },
+  rolePill: {
+    backgroundColor: Colors.primaryMuted,
+    borderRadius: Radius.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  rolePillText: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: Colors.primary,
+  },
+  staffRemove: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: Colors.error,
+  },
+  roleRow: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  roleChip: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  roleChipIdle: {
+    backgroundColor: Colors.surfaceElevated,
+    borderColor: Colors.surfaceBorder,
+  },
+  roleChipSelected: {
+    backgroundColor: Colors.primaryMuted,
+    borderColor: Colors.primary,
+  },
+  roleChipText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: Colors.textMuted,
+  },
+  roleChipTextSelected: {
+    color: Colors.primary,
+  },
+  staffError: {
+    fontSize: 11,
+    color: Colors.error,
+  },
+  version: {
+    fontSize: 10,
+    fontFamily: 'monospace',
+    color: Colors.textMuted,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  saveBar: {
+    borderTopWidth: 1,
+    borderTopColor: Colors.surfaceBorder,
+    backgroundColor: Colors.surface,
+    padding: Spacing.md,
+  },
+});

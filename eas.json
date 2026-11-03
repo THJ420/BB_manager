@@ -1,0 +1,33 @@
+{
+  "cli": {
+    "version": "^20.0.0"
+  },
+  "build": {
+    "dev:development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "simulator": true
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "channel": "preview"
+    },
+    "production": {
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "ios": {
+        "synciOSFrameworks": true
+      }
+    }
+  }
+}
