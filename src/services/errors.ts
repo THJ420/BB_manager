@@ -51,6 +51,8 @@ export interface DescribedPocketBaseError {
   detail: string;
   url: string;
   data: Record<string, unknown>;
+  /** Raw transport error (Android: "TypeError: Network request failed"). */
+  raw: string;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -94,7 +96,23 @@ export function describePocketBaseError(error: unknown): DescribedPocketBaseErro
   const response = asRecord(source.response);
   const responseData = asRecord(response.data);
   const data = Object.keys(responseData).length > 0 ? responseData : response;
-  const detail = fieldErrorDetail(data);
+  const fieldDetail = fieldErrorDetail(data);
+
+  // Network/TLS failures never reach the server, so `response` is empty and the
+  // only useful breadcrumb is the original exception the SDK wrapped. RN's fetch
+  // collapses DNS/TLS/connection errors into "TypeError: Network request failed",
+  // which is why the raw text is surfaced verbatim.
+  const original = asRecord(source.originalError);
+  const originalName = typeof original.name === 'string' ? original.name : '';
+  const originalMessage = typeof original.message === 'string' ? original.message : '';
+  const originalCause = asRecord(original.cause);
+  const causeMessage =
+    typeof originalCause.message === 'string' ? originalCause.message : '';
+  const raw = [originalName, originalMessage, causeMessage]
+    .filter((part) => part && part !== 'Error')
+    .join(': ');
+
+  const detail = fieldDetail || raw;
 
   let kind: PocketBaseErrorKind = 'unknown';
   if (source.isAbort === true) {
@@ -117,7 +135,7 @@ export function describePocketBaseError(error: unknown): DescribedPocketBaseErro
     kind = 'validation';
   }
 
-  return { kind, status, message, detail, url, data };
+  return { kind, status, message, detail, url, data, raw };
 }
 
 export function isAuthFailure(error: DescribedPocketBaseError): boolean {
@@ -138,7 +156,9 @@ export function describeSyncHint(error: DescribedPocketBaseError): string {
     case 'not-found':
       return 'The record does not exist in PocketBase; its create likely failed first.';
     case 'network':
-      return 'PocketBase is unreachable; queued actions retry automatically.';
+      return error.raw
+        ? `No HTTP response (${error.raw}). Run the network probe to isolate TLS/DNS/URL.`
+        : 'PocketBase is unreachable; queued actions retry automatically.';
     case 'conflict':
       return 'A record with this id already exists.';
     default:

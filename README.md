@@ -232,6 +232,34 @@ Role capabilities enforced on both sides:
 The UI hides "+ ADD ITEM" and disables name/category/description/photo for roles that
 PocketBase would reject, so those mutations are never queued.
 
+### Expo Go: "network 0 / PocketBase is unreachable" while the browser works
+
+`status 0` means the request never produced an HTTP response — the SDK wrapped a
+transport exception (`TypeError: Network request failed` on Android). Work through these:
+
+1. **Check the bundle URL.** The startup log prints `[pb] base URL: …`. Expo inlines
+   `EXPO_PUBLIC_*` at bundle time, so after editing `.env` restart with
+   `npx expo start -c`. A `127.0.0.1`/`localhost` value can never work from a phone
+   (the app logs a warning).
+2. **Run Settings → RUN SYNC DIAGNOSTICS.** The report includes `raw-health` (plain
+   `fetch`, no SDK), `redirect-health` (the `//api` 307 path), `raw-post-auth` (POST
+   reachability) and, when the host fails, `control-https` (a neutral Cloudflare host).
+   The verdict line names the failure class:
+
+   | Result | Meaning | Action |
+   | --- | --- | --- |
+   | `raw-health` 200, SDK 0 | SDK-only failure | report with the `[pb:req]`/`[pb:res]` logs |
+   | `raw-health` 0, `control-https` 200 | general HTTPS works, this host does not answer | Cloudflare/WAF is challenging the app client — allow the tunnel API path for non-browser clients |
+   | `raw-health` 0, `control-https` 0 | no HTTPS at all from the app | device VPN / Private DNS / proxy / TLS interception |
+   | `redirect-health` 307 without a body | RN did not follow the redirect | remove the trailing slash from the configured URL |
+
+3. **Get the native cause.** React Native collapses DNS, TLS and connection-reset
+   errors into `TypeError: Network request failed`; JavaScript cannot see more.
+   Use `adb logcat | grep -iE "okhttp|ssl|cleartext|pocket"` while running the probe.
+
+Requests now time out after 20 s (`POCKETBASE_REQUEST_TIMEOUT_MS`) instead of freezing
+the outbox flush, and dev builds log every SDK call as `[pb:req]` / `[pb:res]`.
+
 ## Design system
 
 - Background `#121212`, cards `#262626`, header/sheets `#1E1E1E`, hairline `#333333`

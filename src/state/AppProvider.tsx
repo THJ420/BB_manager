@@ -35,6 +35,7 @@ import { assignedBranchId, canCreateMenuItems } from '../services/branchScope';
 import { startRealtime } from '../services/realtime';
 import { flushOutbox, SyncFailure } from '../services/sync';
 import { describeSyncHint } from '../services/errors';
+import { runNetworkProbe, NetworkProbeResult } from '../services/networkProbe';
 import { fetchBranchSnapshot, BranchSnapshot } from '../services/data';
 import {
   Branch,
@@ -58,6 +59,7 @@ export interface LoginResult {
 export interface SyncDiagnosticsReport {
   generatedAt: string;
   pocketbase: PocketBaseDiagnostics;
+  network: NetworkProbeResult;
   queue: { pending: number; actions: string[] };
   result: { synced: number; failed: number };
   failures: Array<{
@@ -759,6 +761,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const runSyncDiagnostics = useCallback(async (): Promise<SyncDiagnosticsReport> => {
     const pendingEntries = stateRef.current.outbox.filter((entry) => !entry.synced);
     const pocketbase = pocketBaseDiagnostics();
+    const network = await runNetworkProbe();
 
     console.log('[diag] PocketBase:', JSON.stringify(pocketbase));
     console.log(
@@ -777,6 +780,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const report: SyncDiagnosticsReport = {
       generatedAt: new Date().toISOString(),
       pocketbase,
+      network,
       queue: {
         pending: pendingEntries.length,
         actions: pendingEntries.map((entry) => `${entry.actionType}: ${entry.label}`),

@@ -48,6 +48,25 @@ describe('describePocketBaseError', () => {
     expect(described.status).toBe(0);
   });
 
+  it('surfaces the raw Android transport error on status 0', () => {
+    const transportError = Object.assign(new TypeError('Network request failed'), {
+      cause: { message: 'SSL handshake aborted' },
+    });
+    const described = describePocketBaseError({
+      status: 0,
+      message: 'Something went wrong while processing your request.',
+      response: {},
+      url: 'https://pocket.example/api/health',
+      originalError: transportError,
+    });
+
+    expect(described.kind).toBe('network');
+    expect(described.raw).toContain('TypeError');
+    expect(described.raw).toContain('Network request failed');
+    expect(described.raw).toContain('SSL handshake aborted');
+    expect(describeSyncHint(described)).toContain('No HTTP response');
+  });
+
   it('classifies a missing record', () => {
     const described = describePocketBaseError(pbError(404, { message: 'Not found.' }));
     expect(described.kind).toBe('not-found');

@@ -819,6 +819,13 @@ export default function TerminalSettingsScreen() {
               Branch: {diagnostics.pocketbase.branchId || '(none)'}
             </Text>
             <Text style={styles.diagLine}>
+              Raw fetch health:{' '}
+              {diagnostics.network.checks.find((check) => check.id === 'raw-health')?.status ||
+                'no response'}{' '}
+              ({diagnostics.network.platform})
+            </Text>
+            <Text style={styles.diagLine}>{diagnostics.network.verdict}</Text>
+            <Text style={styles.diagLine}>
               Queue: {diagnostics.queue.pending} pending • {diagnostics.result.synced} synced /{' '}
               {diagnostics.result.failed} rejected
             </Text>
