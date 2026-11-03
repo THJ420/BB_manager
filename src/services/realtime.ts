@@ -21,17 +21,25 @@ import {
   TerminalSettings,
 } from '../types';
 
+export type RealtimeEntity = 'order' | 'menu_item' | 'table' | 'reservation';
+
 export interface RealtimeHandlers {
   onOrder: (order: Order) => void;
   onMenuItem: (item: MenuItem) => void;
   onTable: (table: DiningTable) => void;
   onReservation: (reservation: Reservation) => void;
+  /** A record removed on the website (or another terminal). */
+  onDelete: (entity: RealtimeEntity, id: string) => void;
   onStoreConfig: (config: StoreOperationsConfig) => void;
   onSettings: (settings: TerminalSettings) => void;
   onStatus: (status: ConnectionStatus) => void;
 }
 
-type Subscription = [collection: string, handle: (record: RecordModel) => void];
+type Subscription = [
+  collection: string,
+  entity: RealtimeEntity | null,
+  handle: (record: RecordModel) => void,
+];
 
 function recordBranchId(record: RecordModel): string {
   return typeof record.branch_id === 'string' ? record.branch_id : '';
@@ -63,6 +71,7 @@ export async function startRealtime(
   const subscriptions: Subscription[] = [
     [
       COLLECTIONS.orders,
+      'order',
       (record) => {
         if (!belongsToBranch(record)) return;
         handlers.onOrder(mapOrderRecord(record));
@@ -70,6 +79,7 @@ export async function startRealtime(
     ],
     [
       COLLECTIONS.menuItems,
+      'menu_item',
       (record) => {
         if (!belongsToBranch(record)) return;
         handlers.onMenuItem(mapMenuRecord(record));
@@ -77,6 +87,7 @@ export async function startRealtime(
     ],
     [
       COLLECTIONS.tables,
+      'table',
       (record) => {
         if (!belongsToBranch(record)) return;
         handlers.onTable(mapTableRecord(record));
@@ -84,6 +95,7 @@ export async function startRealtime(
     ],
     [
       COLLECTIONS.reservations,
+      'reservation',
       (record) => {
         if (!belongsToBranch(record)) return;
         handlers.onReservation(mapReservationRecord(record));
@@ -91,6 +103,7 @@ export async function startRealtime(
     ],
     [
       COLLECTIONS.branchSettings,
+      null,
       (record) => {
         if (!belongsToBranch(record)) return;
         const defaults = normalizeTerminalSettings({
@@ -107,12 +120,18 @@ export async function startRealtime(
   const unsubscribers: Array<() => void> = [];
 
   try {
-    for (const [collection, handle] of subscriptions) {
+    for (const [collection, entity, handle] of subscriptions) {
       const unsubscribe = await pb
         .collection(collection)
         .subscribe('*', (event) => {
-          if (event.action === 'delete') return;
+          if (!belongsToBranch(event.record)) return;
           try {
+            if (event.action === 'delete') {
+              // A deleted record still carries its branch, so the gate above
+              // keeps another branch's deletion from touching local state.
+              if (entity) handlers.onDelete(entity, event.record.id);
+              return;
+            }
             handle(event.record);
           } catch (error) {
             console.warn(`Unable to apply realtime ${collection} event`, error);

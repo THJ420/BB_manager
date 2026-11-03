@@ -22,7 +22,7 @@ import {
   ReservationFilter,
 } from '../../lib/domain';
 import { useApp } from '../../state/AppProvider';
-import { canDeleteTables } from '../../services/branchScope';
+import { canCreateTables, canDeleteTables } from '../../services/branchScope';
 import { Colors, Layout, Radius, Spacing } from '../../theme/colors';
 import { DiningTable, Reservation, ReservationStatus } from '../../types';
 
@@ -36,7 +36,9 @@ export default function DiningTablesScreen() {
     deleteTable,
     updateReservationStatus,
   } = useApp();
-  const canDelete = canDeleteTables(state.session?.role ?? '');
+  const role = state.session?.role ?? '';
+  const canDelete = canDeleteTables(role);
+  const canCreate = canCreateTables(role);
   const [viewMode, setViewMode] = useState<ViewMode>('reservations');
   const [editorVisible, setEditorVisible] = useState(false);
   const [editingTable, setEditingTable] = useState<DiningTable | null>(null);
@@ -111,7 +113,7 @@ export default function DiningTablesScreen() {
             <View style={styles.lobbyPill}>
               <Text style={styles.lobbyText}>{arrivedCount} In Lobby</Text>
             </View>
-          ) : (
+          ) : canCreate ? (
             <ActionButton
               label="+ ADD TABLE"
               variant="primary"
@@ -119,7 +121,7 @@ export default function DiningTablesScreen() {
               onPress={openCreate}
               testID="btn_add_table"
             />
-          )
+          ) : undefined
         }
         bottom={
           <ActionButton
@@ -191,7 +193,11 @@ export default function DiningTablesScreen() {
               }
             />
           ) : (
-            <DiningTablesPanel tables={state.tables} onEdit={openEdit} />
+            <DiningTablesPanel
+              tables={state.tables}
+              canCreate={canCreate}
+              onEdit={openEdit}
+            />
           )}
         </Animated.View>
       </View>
@@ -290,9 +296,11 @@ function GuestReservationsPanel({
 
 function DiningTablesPanel({
   tables,
+  canCreate,
   onEdit,
 }: {
   tables: DiningTable[];
+  canCreate: boolean;
   onEdit: (table: DiningTable) => void;
 }) {
   return (
@@ -310,7 +318,11 @@ function DiningTablesPanel({
         <View style={styles.emptyState}>
           <Text style={styles.emptyEmoji}>🪑</Text>
           <Text style={styles.emptyTitle}>No dining tables yet</Text>
-          <Text style={styles.emptySub}>Use + ADD TABLE to create the first one.</Text>
+          <Text style={styles.emptySub}>
+            {canCreate
+              ? 'Use + ADD TABLE to create the first one.'
+              : 'A manager or kitchen lead can add the first table.'}
+          </Text>
         </View>
       ) : (
         tables.map((table) => <TableCard key={table.id} table={table} onEdit={onEdit} />)

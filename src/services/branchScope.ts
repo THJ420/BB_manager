@@ -119,6 +119,11 @@ export function canDeleteMenuItems(role: string): boolean {
   return role === 'manager' || role === 'kitchen_lead';
 }
 
+/** Mirrors `tables.createRule`: managers and kitchen leads may add tables. */
+export function canCreateTables(role: string): boolean {
+  return role === 'manager' || role === 'kitchen_lead';
+}
+
 /** Mirrors `tables.deleteRule`: managers and kitchen leads may remove tables. */
 export function canDeleteTables(role: string): boolean {
   return role === 'manager' || role === 'kitchen_lead';

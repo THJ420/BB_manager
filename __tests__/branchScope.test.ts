@@ -14,6 +14,7 @@ import {
   BranchScopeError,
   assignedBranchId,
   canCreateMenuItems,
+  canCreateTables,
   canDeleteMenuItems,
   canDeleteTables,
   canEditMenuDetails,
@@ -99,6 +100,9 @@ describe('branch scope enforcement', () => {
     expect(canDeleteTables('manager')).toBe(true);
     expect(canDeleteTables('kitchen_lead')).toBe(true);
     expect(canDeleteTables('floor_staff')).toBe(false);
+    expect(canCreateTables('manager')).toBe(true);
+    expect(canCreateTables('kitchen_lead')).toBe(true);
+    expect(canCreateTables('floor_staff')).toBe(false);
   });
 
   it('builds realtime filters from the authenticated branch only', () => {

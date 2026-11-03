@@ -9,6 +9,7 @@ import React, {
   useState,
   ReactNode,
 } from 'react';
+import { AppState as NativeAppState } from 'react-native';
 import { BRANCHES } from '../constants/branches';
 import { buildOutboxEntry, buildSimulatedOrder, sortOutboxChronologically } from '../lib/domain';
 import { normalizeTerminalSettings } from '../lib/settings';
@@ -38,12 +39,14 @@ import {
   PocketBaseDiagnostics,
 } from '../services/pocketbase';
 import {
+  assertBranchScope,
   assignedBranchId,
   canCreateMenuItems,
+  canCreateTables,
   canDeleteMenuItems,
   canDeleteTables,
 } from '../services/branchScope';
-import { startRealtime } from '../services/realtime';
+import { startRealtime, RealtimeEntity } from '../services/realtime';
 import { flushOutbox, SyncFailure } from '../services/sync';
 import { describeSyncHint } from '../services/errors';
 import { runNetworkProbe, NetworkProbeResult } from '../services/networkProbe';
@@ -125,6 +128,13 @@ const AppContext = createContext<AppContextValue | null>(null);
 /** Slow recovery cadence for outbox actions that failed while offline. */
 const OUTBOX_RETRY_INTERVAL_MS = 30_000;
 
+/**
+ * Safety net for changes made on the website while SSE was disconnected. The
+ * realtime subscription is still the fast path; this only refreshes a branch
+ * with no queued local writes.
+ */
+const REMOTE_REFRESH_INTERVAL_MS = 60_000;
+
 function syntheticBranch(
   branchId: string,
   branchName: string | undefined,
@@ -162,6 +172,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const lastSyncFailuresRef = useRef<SyncFailure[]>([]);
   const lastDiscardedRef = useRef<SyncFailure[]>([]);
   const lastFlushRef = useRef({ synced: 0, failed: 0 });
+  const realtimeReadyRef = useRef(false);
   const [realtimeEpoch, setRealtimeEpoch] = useState(0);
 
   useEffect(() => {
@@ -404,30 +415,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshRemoteData = useCallback(
-    async (branchId: string): Promise<void> => {
+    async (branchId: string, options: { silent?: boolean } = {}): Promise<void> => {
       if (!isPocketBaseConfigured) return;
       const requestId = remoteRequestIdRef.current + 1;
       remoteRequestIdRef.current = requestId;
-      dispatch({ type: 'SET_CONNECTION', status: 'polling' });
+      if (!options.silent) {
+        dispatch({ type: 'SET_CONNECTION', status: 'polling' });
+      }
 
       try {
         const snapshot = await fetchBranchSnapshot(branchId);
         if (
           requestId !== remoteRequestIdRef.current ||
-          stateRef.current.session?.branchId !== branchId
+          stateRef.current.session?.branchId !== branchId ||
+          (options.silent && stateRef.current.outbox.length > 0)
         ) {
           return;
         }
         applyBranchSnapshot(branchId, snapshot);
-        dispatch({ type: 'SET_CONNECTION', status: 'live' });
+        if (!options.silent) {
+          dispatch({ type: 'SET_CONNECTION', status: 'live' });
+        }
       } catch (error) {
         console.warn('Unable to refresh the live PocketBase branch snapshot', error);
-        if (requestId === remoteRequestIdRef.current) {
+        if (!options.silent && requestId === remoteRequestIdRef.current) {
           dispatch({ type: 'SET_CONNECTION', status: 'offline' });
         }
       }
     },
     [applyBranchSnapshot]
+  );
+
+  /**
+   * Pulls the server snapshot without touching the connection badge. Skipped
+   * while mutations are queued so an unflushed optimistic change is not
+   * replaced by the older server copy.
+   */
+  const refreshRemoteDataSilently = useCallback(
+    async (branchId: string, options: { force?: boolean } = {}): Promise<void> => {
+      if (!options.force && stateRef.current.outbox.length > 0) return;
+      await refreshRemoteData(branchId, { silent: true });
+    },
+    [refreshRemoteData]
   );
 
   // Load the branch-scoped live dataset whenever the signed-in branch changes.
@@ -461,9 +490,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
       onTable: (table) => dispatch({ type: 'SAVE_TABLE', table }),
       onReservation: (reservation) =>
         dispatch({ type: 'UPSERT_RESERVATION', reservation }),
+      onDelete: (entity: RealtimeEntity, id: string) => {
+        if (entity === 'menu_item') {
+          dispatch({ type: 'REMOVE_MENU_ITEM', itemId: id });
+        } else if (entity === 'table') {
+          dispatch({ type: 'REMOVE_TABLE', tableId: id });
+        } else if (entity === 'reservation') {
+          dispatch({ type: 'REMOVE_RESERVATION', reservationId: id });
+        } else if (entity === 'order') {
+          dispatch({ type: 'REMOVE_ORDER', orderId: id });
+        }
+      },
       onStoreConfig: (config) => dispatch({ type: 'SET_STORE_CONFIG', config }),
       onSettings: (settings) => dispatch({ type: 'SET_SETTINGS', settings }),
-      onStatus: (status) => dispatch({ type: 'SET_CONNECTION', status }),
+      onStatus: (status) => {
+        dispatch({ type: 'SET_CONNECTION', status });
+        if (status === 'live' && !realtimeReadyRef.current) {
+          realtimeReadyRef.current = true;
+          // PocketBase does not replay changes that happened while SSE was
+          // down, so reconcile once as soon as a subscription is established.
+          void refreshRemoteDataSilently(branchId);
+        }
+      },
     }).then((dispose) => {
       if (disposed) dispose();
       else cleanup = dispose;
@@ -471,9 +519,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     return () => {
       disposed = true;
+      realtimeReadyRef.current = false;
       cleanup?.();
     };
-  }, [state.hydrated, state.session?.branchId, playIncomingAlert, realtimeEpoch]);
+  }, [
+    state.hydrated,
+    state.session?.branchId,
+    playIncomingAlert,
+    refreshRemoteDataSilently,
+    realtimeEpoch,
+  ]);
 
   const enqueue = useCallback(
     async (
@@ -590,12 +645,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       // Removing the last photo must clear PocketBase's `image` file field, not
       // just switch the optimistic card back to its placeholder.
-      const imageRemoved = Boolean(existing?.imageUrl) && !item.imageUrl;
-      dispatch({ type: 'UPSERT_MENU_ITEM', item });
+      const scopedItem: MenuItem = {
+        ...item,
+        branchId: assertBranchScope(stateRef.current.activeBranch.id),
+      };
+      const imageRemoved = Boolean(existing?.imageUrl) && !scopedItem.imageUrl;
+      dispatch({ type: 'UPSERT_MENU_ITEM', item: scopedItem });
       await enqueue(
         existing ? 'UPDATE_MENU_ITEM' : 'CREATE_MENU_ITEM',
-        `Menu item ${item.name} ${existing ? 'updated' : 'added'}`,
-        { item, imageRemoved }
+        `Menu item ${scopedItem.name} ${existing ? 'updated' : 'added'}`,
+        { item: scopedItem, imageRemoved }
       );
     },
     [enqueue]
@@ -623,8 +682,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const saveTable = useCallback(
     async (table: DiningTable): Promise<void> => {
-      dispatch({ type: 'SAVE_TABLE', table });
-      await enqueue('SAVE_TABLE', `Table ${table.name} saved`, { table });
+      const existing = stateRef.current.tables.find((entry) => entry.id === table.id);
+      const role = stateRef.current.session?.role ?? '';
+      if (!existing && !canCreateTables(role)) {
+        // tables.createRule is manager/kitchen_lead only; queueing this would
+        // retry a permanent 403 and keep the outbox badge lit.
+        console.error(
+          `[tables] role "${role || 'unknown'}" cannot create dining tables — action not queued.`
+        );
+        return;
+      }
+      const scopedTable: DiningTable = {
+        ...table,
+        branchId: assertBranchScope(stateRef.current.activeBranch.id),
+      };
+      dispatch({ type: 'SAVE_TABLE', table: scopedTable });
+      await enqueue('SAVE_TABLE', `Table ${scopedTable.name} saved`, {
+        table: scopedTable,
+      });
     },
     [enqueue]
   );
@@ -812,6 +887,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         );
       }
 
+      // Once the queue is drained, reconcile with the server so a website edit
+      // made while the terminal was offline is reflected immediately.
+      const queueDrained =
+        result.failedIds.length === 0 &&
+        result.syncedIds.length + result.discarded.length === entries.length;
+      if (queueDrained && result.syncedIds.length > 0) {
+        const branchId = stateRef.current.session?.branchId;
+        if (branchId) {
+          void refreshRemoteDataSilently(branchId, { force: true });
+        }
+      }
+
       // A rejection from PocketBase means the network is up but the queue is
       // blocked by rules/auth — show POLLING, not OFFLINE QUEUED.
       const transportFailure = result.failures.some(
@@ -834,7 +921,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       syncInFlightRef.current = false;
     }
-  }, []);
+  }, [refreshRemoteDataSilently]);
 
   /**
    * Flips the terminal out of OFFLINE as soon as the host answers /api/health,
@@ -857,6 +944,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     return true;
   }, []);
+
+  // Website edits reach the terminal through SSE, but a silently dropped
+  // subscription would otherwise leave the cache stale until app restart.
+  useEffect(() => {
+    if (!state.hydrated || !state.session || !isPocketBaseConfigured) return;
+    const branchId = state.session.branchId;
+    const timer = setInterval(() => {
+      if (stateRef.current.connection === 'offline') return;
+      void refreshRemoteDataSilently(branchId);
+    }, REMOTE_REFRESH_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [state.hydrated, state.session?.branchId, refreshRemoteDataSilently]);
+
+  // Returning from the background is the most common way a terminal misses a
+  // website change; probe first so an offline device does not block on fetch.
+  useEffect(() => {
+    if (!state.hydrated || !state.session || !isPocketBaseConfigured) return;
+    const subscription = NativeAppState.addEventListener('change', (next) => {
+      if (next !== 'active') return;
+      const branchId = stateRef.current.session?.branchId;
+      if (!branchId) return;
+      void probeConnection().then((reachable) => {
+        if (!reachable) return;
+        void refreshRemoteDataSilently(branchId);
+        void syncOutboxNow();
+      });
+    });
+    return () => subscription.remove();
+  }, [
+    state.hydrated,
+    state.session?.branchId,
+    probeConnection,
+    refreshRemoteDataSilently,
+    syncOutboxNow,
+  ]);
 
   /** Manual reset: wipe every pending mutation and reconnect immediately. */
   const clearOutbox = useCallback(async (): Promise<void> => {

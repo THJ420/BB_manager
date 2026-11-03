@@ -67,7 +67,11 @@ connectivity returns); a failed PocketBase request stays queued, and the connect
 
 `src/services/realtime.ts` subscribes to the `orders`, `menu_items`, `tables`,
 `reservations` and `branch_settings` collections. Events are mapped into typed records and
-upserted into app state. With no `EXPO_PUBLIC_POCKETBASE_URL` the terminal runs in local demo mode
+upserted into app state; a `delete` event removes the matching local record instead of
+being ignored. When the subscription is (re)established, when the app returns to the
+foreground, and every 60 s while the outbox is empty, the provider reconciles a full
+branch snapshot so changes made on the website while the terminal was disconnected are
+not missed. With no `EXPO_PUBLIC_POCKETBASE_URL` the terminal runs in local demo mode
 (no network calls) while keeping SQLite as the source of truth.
 
 ### Order alerts
@@ -246,9 +250,25 @@ Role capabilities enforced on both sides:
 | Create menu item | ✅ | ✅ | ❌ |
 | Rename / recategorise / photo | ✅ | ❌ | ❌ |
 | Price, stock, visibility | ✅ | ✅ | ✅ |
+| Create / delete dining table | ✅ | ✅ | ❌ |
+| Rename / reseat an existing table | ✅ | ✅ | ✅ |
 
-The UI hides "+ ADD ITEM" and disables name/category/description/photo for roles that
-PocketBase would reject, so those mutations are never queued.
+The UI hides "+ ADD ITEM" / "+ ADD TABLE" and disables name/category/description/photo for
+roles that PocketBase would reject, so those mutations are never queued.
+
+### Website changes not reaching the terminal
+
+The website writes to Laravel, Laravel mirrors the row into PocketBase through
+`PocketBaseSyncObserver`, and the terminal receives it over SSE (plus the snapshot
+reconciliation described above). If a website edit never arrives:
+
+- Check the PocketBase log for a `BB sync ok …` line. A `202 "Unsupported collection
+  [tables]"` response means the deployed Laravel build predates the table handler in
+  `PocketBaseInboundSync`; deploy that build and run `php artisan pocketbase:backfill-tables`.
+- A menu created before PocketBase linking has `pocketbase_id = NULL`; run
+  `php artisan pocketbase:backfill-menu` once so later website edits patch the same row.
+- A stale link (the PocketBase row was deleted by hand) is healed on the next website
+  save: the 404 clears `pocketbase_id` and the syncer recreates the row.
 
 ### Expo Go: "network 0 / PocketBase is unreachable" while the browser works
 

@@ -7,7 +7,7 @@ import {
   createSeedTables,
 } from '../src/lib/seed';
 import { BRANCHES } from '../src/constants/branches';
-import { OutboxEntry } from '../src/types';
+import { OutboxEntry, Reservation } from '../src/types';
 
 const NOW = Date.parse('2026-01-01T12:00:00.000Z');
 const AT = '2026-01-01T12:00:00.000Z';
@@ -284,5 +284,33 @@ describe('appReducer', () => {
 
     expect(next.tables).toHaveLength(seeded.tables.length - 1);
     expect(next.tables.find((table) => table.id === victim.id)).toBeUndefined();
+  });
+  it('removes a website-deleted reservation from local state', () => {
+    const reservation: Reservation = {
+      id: 'res_1',
+      branchId: BRANCHES[0]!.id,
+      customerName: 'Website Guest',
+      customerPhone: '',
+      guestCount: 2,
+      reservationTime: AT,
+      tableNumber: 'T1',
+      status: 'upcoming',
+    };
+    const seeded = { ...hydratedState(), reservations: [reservation] };
+    const next = appReducer(seeded, {
+      type: 'REMOVE_RESERVATION',
+      reservationId: 'res_1',
+    });
+
+    expect(next.reservations).toEqual([]);
+  });
+  it('removes a website-deleted order from the board and analytics ledger', () => {
+    const seeded = hydratedState();
+    const victim = seeded.orders[0]!;
+    const withHistory = { ...seeded, analyticsHistory: [victim] };
+    const next = appReducer(withHistory, { type: 'REMOVE_ORDER', orderId: victim.id });
+
+    expect(next.orders.find((order) => order.id === victim.id)).toBeUndefined();
+    expect(next.analyticsHistory).toEqual([]);
   });
 });

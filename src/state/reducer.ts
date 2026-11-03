@@ -64,6 +64,7 @@ export type AppAction =
   | { type: 'SET_ORDERS'; orders: Order[] }
   | { type: 'ADD_ORDER'; order: Order }
   | { type: 'UPSERT_ORDER'; order: Order }
+  | { type: 'REMOVE_ORDER'; orderId: string }
   | { type: 'UPDATE_ORDER_STATUS'; orderId: string; status: OrderStatus; at: string }
   | { type: 'SET_MENU'; items: MenuItem[] }
   | { type: 'UPSERT_MENU_ITEM'; item: MenuItem }
@@ -75,6 +76,7 @@ export type AppAction =
   | { type: 'REMOVE_TABLE'; tableId: string }
   | { type: 'SET_RESERVATIONS'; reservations: Reservation[] }
   | { type: 'UPSERT_RESERVATION'; reservation: Reservation }
+  | { type: 'REMOVE_RESERVATION'; reservationId: string }
   | { type: 'UPDATE_RESERVATION_STATUS'; reservationId: string; status: ReservationStatus }
   | { type: 'SET_STORE_CONFIG'; config: StoreOperationsConfig }
   | { type: 'PATCH_STORE_CONFIG'; patch: Partial<StoreOperationsConfig> }
@@ -190,6 +192,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     }
 
+    case 'REMOVE_ORDER':
+      return {
+        ...state,
+        orders: state.orders.filter((order) => order.id !== action.orderId),
+        analyticsHistory: state.analyticsHistory.filter(
+          (order) => order.id !== action.orderId
+        ),
+      };
+
     case 'UPDATE_ORDER_STATUS':
       return {
         ...state,
@@ -274,6 +285,14 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           : [action.reservation, ...state.reservations],
       };
     }
+
+    case 'REMOVE_RESERVATION':
+      return {
+        ...state,
+        reservations: state.reservations.filter(
+          (reservation) => reservation.id !== action.reservationId
+        ),
+      };
 
     case 'UPDATE_RESERVATION_STATUS':
       return {
