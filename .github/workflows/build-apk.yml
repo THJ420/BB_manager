@@ -1,0 +1,226 @@
+name: Build Android APK (EAS local)
+
+# Compiles the Android APK on GitHub's Ubuntu runner instead of waiting in the
+# Expo EAS free-tier cloud queue. `eas build --local` still talks to Expo only to
+# verify the project and (for the preview profile) download the managed Android
+# keystore, so an EXPO_TOKEN repository secret is required.
+#
+# Required repository secret:
+#   EXPO_TOKEN  - Expo personal access token (https://expo.dev/settings/access-tokens)
+#
+# Optional repository variable:
+#   EXPO_PUBLIC_POCKETBASE_URL - defaults to https://pocket.enjoydonerkebab.pl
+#
+# The generated APK is attached to the workflow run as a downloadable artifact.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+# A newer push supersedes an in-flight APK build.
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    name: Compile preview APK on ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    env:
+      CI: "true"
+      EXPO_NO_TELEMETRY: "1"
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EXPO_PUBLIC_POCKETBASE_URL: ${{ vars.EXPO_PUBLIC_POCKETBASE_URL || 'https://pocket.enjoydonerkebab.pl' }}
+
+      # eas.json profile to compile. The preview profile emits an APK
+      # (distribution: internal, android.buildType: apk).
+      EAS_BUILD_PROFILE: preview
+
+      # Android toolchain. ubuntu-latest already ships the SDK at this path; we
+      # pin the exact versions required by Expo SDK 58 / React Native 0.88.
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/27.1.12297006
+      ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/27.1.12297006
+
+      # RN 0.88 + AGP 9 need more heap than the 2 GB default on a cold runner.
+      GRADLE_OPTS: "-Xmx4g -XX:MaxMetaspaceSize=1g -Dorg.gradle.daemon=false"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          # Expo SDK 58 / React Native 0.88 require Node >= 22.13.0.
+          # Node 18/20 are not supported by this dependency tree.
+          node-version: 22
+          cache: npm
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Configure Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_HOME="$SDK_ROOT"
+          export ANDROID_SDK_ROOT="$SDK_ROOT"
+
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            # Command-line tools live under cmdline-tools/<version>/bin on the
+            # runner image; pick the newest one if `latest` is not on PATH.
+            SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -n 1)"
+          fi
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::error::sdkmanager not found under $SDK_ROOT"
+            exit 1
+          fi
+          SDKMANAGER_DIR="$(dirname "$SDKMANAGER")"
+          export PATH="$SDKMANAGER_DIR:$SDK_ROOT/platform-tools:$SDK_ROOT/emulator:$PATH"
+
+          # Accept any new SDK/NDK licences before installing missing packages.
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+
+          # Pin the toolchain required by the React Native 0.88 version catalog:
+          #   compileSdk 37, buildTools 37.0.0, NDK 27.1.12297006
+          # The runner image ships NDK 27.3/29/30 but NOT 27.1, which Gradle
+          # looks up by exact version. Only install what is actually missing.
+          install_pkg() {
+            local pkg="$1"
+            if "$SDKMANAGER" --list_installed 2>/dev/null | grep -Fq "$pkg"; then
+              echo "Already installed: $pkg"
+            else
+              echo "Installing: $pkg"
+              "$SDKMANAGER" --install "$pkg"
+            fi
+          }
+
+          install_pkg "platform-tools"
+          install_pkg "platforms;android-37.0"
+          install_pkg "build-tools;37.0.0"
+          install_pkg "ndk;27.1.12297006"
+          install_pkg "cmake;3.22.1"
+
+          {
+            echo "ANDROID_HOME=$SDK_ROOT"
+            echo "ANDROID_SDK_ROOT=$SDK_ROOT"
+            echo "ANDROID_NDK_HOME=$SDK_ROOT/ndk/27.1.12297006"
+            echo "ANDROID_NDK_ROOT=$SDK_ROOT/ndk/27.1.12297006"
+          } >> "$GITHUB_ENV"
+          {
+            echo "$SDKMANAGER_DIR"
+            echo "$SDK_ROOT/platform-tools"
+            echo "$SDK_ROOT/emulator"
+          } >> "$GITHUB_PATH"
+
+          echo "Android platforms:"
+          ls -1 "$SDK_ROOT/platforms"
+          echo "Android NDKs:"
+          ls -1 "$SDK_ROOT/ndk"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install EAS CLI
+        run: npm install --global eas-cli
+
+      - name: Verify Expo authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${EXPO_TOKEN:-}" ]; then
+            echo "::error title=EXPO_TOKEN is missing::Add a repository secret named EXPO_TOKEN (Settings > Secrets and variables > Actions) containing an Expo personal access token, then re-run this workflow."
+            exit 1
+          fi
+          eas --version
+          eas whoami
+
+      - name: Write build environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Expo CLI inlines EXPO_PUBLIC_* variables at bundle time. Exporting it
+          # above is enough, but writing .env keeps local reproductions identical.
+          printf 'EXPO_PUBLIC_POCKETBASE_URL=%s\n' "$EXPO_PUBLIC_POCKETBASE_URL" > .env
+          cat .env
+
+      - name: Build APK locally with EAS
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          eas build \
+            --platform android \
+            --local \
+            --profile "$EAS_BUILD_PROFILE" \
+            --non-interactive \
+            --output "./build/bb-manager-$EAS_BUILD_PROFILE.apk"
+
+      - name: Collect APK
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+
+          # `--output` is the primary location. If a future EAS CLI ignores it,
+          # fall back to the first APK produced in the build directory.
+          if ! compgen -G "build/*.apk" > /dev/null; then
+            APK_PATH="$(find build . -maxdepth 4 -type f -name '*.apk' \
+              -not -path './node_modules/*' -not -path './android/*' \
+              -print -quit 2>/dev/null || true)"
+            if [ -n "$APK_PATH" ]; then
+              cp "$APK_PATH" "build/bb-manager-$EAS_BUILD_PROFILE.apk"
+            fi
+          fi
+
+          ls -lh build
+          if compgen -G "build/*.apk" > /dev/null; then
+            sha256sum build/*.apk
+
+            {
+              echo "### Android APK built locally"
+              echo ""
+              echo "Profile: \`$EAS_BUILD_PROFILE\`"
+              echo ""
+              echo "| File | Size | SHA-256 |"
+              echo "| --- | --- | --- |"
+              for apk in build/*.apk; do
+                echo "| \`$(basename "$apk")\` | $(du -h "$apk" | cut -f1) | \`$(sha256sum "$apk" | cut -d' ' -f1)\` |"
+              done
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload APK artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bb-manager-${{ env.EAS_BUILD_PROFILE }}-apk-${{ github.run_number }}
+          path: build/*.apk
+          if-no-files-found: error
+          retention-days: 30

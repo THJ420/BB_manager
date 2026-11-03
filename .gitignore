@@ -24,3 +24,7 @@ yarn-error.log*
 # Local build snapshot and tool metadata
 bb-manager.zip
 .freebuff/
+
+# Local EAS / CI build outputs
+build/
+artifacts/

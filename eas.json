@@ -1,6 +1,6 @@
 {
   "cli": {
-    "version": "^20.0.0"
+    "version": ">=20.0.0"
   },
   "build": {
     "dev:development": {
@@ -25,9 +25,7 @@
       "android": {
         "buildType": "app-bundle"
       },
-      "ios": {
-        "synciOSFrameworks": true
-      }
+      "ios": {}
     }
   }
 }
