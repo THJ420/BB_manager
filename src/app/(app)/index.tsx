@@ -27,8 +27,12 @@ import { Order } from '../../types';
 
 export default function OrdersBoardScreen() {
   const router = useRouter();
-  const { state, updateOrderStatus, rejectOrder, refreshData, simulateIncomingOrder } =
-    useApp();
+  const {
+    state,
+    updateOrderStatus,
+    rejectOrder,
+    refreshData,
+  } = useApp();
   const { width } = useWindowDimensions();
   const now = useNow(30_000);
   const isTabletSplit = width >= 600;
@@ -135,22 +139,13 @@ export default function OrdersBoardScreen() {
           />
         }
         bottom={
-          <>
-            <ActionButton
-              label="+ NEW ORDER"
-              variant="tonal"
-              onPress={() => void simulateIncomingOrder()}
-              style={styles.headerAction}
-              testID="btn_sim_incoming_order"
-            />
-            <ActionButton
-              label="PICKUP LEDGER"
-              variant="outline"
-              onPress={() => router.push('/(app)/pickup-orders')}
-              style={styles.headerAction}
-              testID="btn_open_ledger"
-            />
-          </>
+          <ActionButton
+            label="PICKUP LEDGER"
+            variant="outline"
+            onPress={() => router.push('/(app)/pickup-orders')}
+            style={styles.headerAction}
+            testID="btn_open_ledger"
+          />
         }
       />
 

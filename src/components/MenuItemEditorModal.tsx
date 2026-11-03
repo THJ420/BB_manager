@@ -123,7 +123,7 @@ export function MenuItemEditorModal({
       category,
       description: description.trim() || 'Fresh kitchen preparation',
       price,
-      currency: item?.currency ?? 'USD',
+      currency: item?.currency ?? 'PLN',
       inStock,
       isVisible,
       preparationMinutes: item?.preparationMinutes ?? 10,
@@ -290,13 +290,12 @@ export function MenuItemEditorModal({
       ) : null}
 
       <TextField
-        label={`Price (${item?.currency ?? 'USD'}) *`}
+        label="Price (zł) *"
         value={priceText}
         onChangeText={(value) => {
           setPriceText(value);
           setPriceError(null);
         }}
-        prefix="$"
         keyboardType="decimal-pad"
         errorText={priceError ?? undefined}
         testID="input_item_price"

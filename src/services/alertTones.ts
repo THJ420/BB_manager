@@ -34,6 +34,12 @@ let activeSubscription: PlaybackSubscription | null = null;
 let activeTimer: ReturnType<typeof setTimeout> | null = null;
 let playbackToken = 0;
 let audioModePromise: Promise<void> | null = null;
+let loopActive = false;
+let loopToneId: AlertToneId | null = null;
+let loopRestartTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Pause between repeats so the alarm reads as a ring rather than a drone. */
+const LOOP_GAP_MS = 1200;
 
 function ensureAudioMode(): Promise<void> {
   if (!audioModePromise) {
@@ -71,8 +77,14 @@ function releaseActivePlayer(): void {
   }
 }
 
-/** Stops any preview or incoming-order tone currently playing. */
+/** Stops any preview, incoming-order tone or active alarm loop. */
 export function stopAlertTone(): void {
+  loopActive = false;
+  loopToneId = null;
+  if (loopRestartTimer) {
+    clearTimeout(loopRestartTimer);
+    loopRestartTimer = null;
+  }
   playbackToken += 1;
   releaseActivePlayer();
 }
@@ -134,4 +146,37 @@ export async function playAlertTone(
     }
     return false;
   }
+}
+
+async function playLoopIteration(toneId: AlertToneId): Promise<boolean> {
+  if (!loopActive || loopToneId !== toneId) return false;
+
+  return playAlertTone(toneId, () => {
+    if (!loopActive || loopToneId !== toneId) return;
+
+    if (loopRestartTimer) clearTimeout(loopRestartTimer);
+    loopRestartTimer = setTimeout(() => {
+      loopRestartTimer = null;
+      if (loopActive && loopToneId === toneId) {
+        void playLoopIteration(toneId);
+      }
+    }, LOOP_GAP_MS);
+  });
+}
+
+/**
+ * Plays the selected tone continuously until stopAlertTone() is called. This is
+ * the incoming-call alarm: it repeats the configured preset instead of using a
+ * separate hard-coded siren.
+ */
+export async function startAlertToneLoop(toneId: AlertToneId): Promise<boolean> {
+  loopActive = true;
+  loopToneId = toneId;
+
+  if (loopRestartTimer) {
+    clearTimeout(loopRestartTimer);
+    loopRestartTimer = null;
+  }
+
+  return playLoopIteration(toneId);
 }

@@ -256,7 +256,7 @@ describe('analyticsMetrics', () => {
       'peak-hours',
     ]);
     expect(metrics[0]?.title).toBe('SALES TODAY');
-    expect(metrics[0]?.value).toBe('$121.25');
+    expect(metrics[0]?.value).toBe('121.25 zł');
     expect(metrics[1]?.title).toBe('AVG ORDER');
     expect(metrics[2]?.title).toBe('COMPLETED ORDERS');
     expect(metrics[3]?.title).toBe('VOID / CANCEL RATE');

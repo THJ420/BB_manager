@@ -9,26 +9,28 @@ import {
 } from '../src/lib/format';
 
 describe('formatCurrency', () => {
-  it('renders two decimals with a dollar prefix', () => {
-    expect(formatCurrency(34.5)).toBe('$34.50');
-    expect(formatCurrency(0)).toBe('$0.00');
+  it('renders two decimals with the złoty suffix', () => {
+    expect(formatCurrency(34.5)).toBe('34.50 zł');
+    expect(formatCurrency(0)).toBe('0.00 zł');
   });
 
   it('falls back to zero for non-finite values', () => {
-    expect(formatCurrency(Number.NaN)).toBe('$0.00');
+    expect(formatCurrency(Number.NaN)).toBe('0.00 zł');
   });
 
   it('formats signed deltas', () => {
-    expect(formatSignedCurrency(1.5)).toBe('+$1.50');
-    expect(formatSignedCurrency(-0.5)).toBe('-$0.50');
+    expect(formatSignedCurrency(1.5)).toBe('+1.50 zł');
+    expect(formatSignedCurrency(-0.5)).toBe('-0.50 zł');
   });
 });
 
 describe('parsePrice', () => {
-  it('accepts plain and prefixed values', () => {
+  it('accepts plain and currency-suffixed values', () => {
     expect(parsePrice('12')).toBe(12);
     expect(parsePrice('12.5')).toBe(12.5);
     expect(parsePrice('$12.50')).toBe(12.5);
+    expect(parsePrice('12.50 zł')).toBe(12.5);
+    expect(parsePrice('zł 12.50')).toBe(12.5);
     expect(parsePrice('0')).toBe(0);
   });
 

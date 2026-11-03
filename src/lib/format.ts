@@ -2,12 +2,12 @@
 
 export function formatCurrency(value: number): string {
   const safe = Number.isFinite(value) ? value : 0;
-  return `$${safe.toFixed(2)}`;
+  return `${safe.toFixed(2)} zł`;
 }
 
 export function formatSignedCurrency(value: number): string {
   const sign = value >= 0 ? '+' : '-';
-  return `${sign}$${Math.abs(value).toFixed(2)}`;
+  return `${sign}${Math.abs(value).toFixed(2)} zł`;
 }
 
 export function formatPercent(value: number, digits = 1): string {
@@ -15,9 +15,13 @@ export function formatPercent(value: number, digits = 1): string {
   return `${safe.toFixed(digits)}%`;
 }
 
-/** Allows "12", "12.5", "12.50", "$12.50"; rejects negatives and non-numeric text. */
+/** Allows "12", "12.5", "12.50", "$12.50", "12.50 zł"; rejects negatives. */
 export function parsePrice(input: string): number | null {
-  const trimmed = input.trim().replace(/^\$/, '');
+  const trimmed = input
+    .trim()
+    .replace(/^\$/, '')
+    .replace(/^zł\s*/i, '')
+    .replace(/\s*zł$/i, '');
   if (!/^\d+(\.\d{0,2})?$/.test(trimmed)) return null;
   const parsed = Number(trimmed);
   if (!Number.isFinite(parsed) || parsed < 0) return null;

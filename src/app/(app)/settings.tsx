@@ -975,7 +975,7 @@ const styles = StyleSheet.create({
   },
   userEmail: {
     fontSize: 11,
-    color: Colors.textMuted,
+    color: Colors.textSecondary,
   },
   statusPill: {
     borderRadius: Radius.full,
@@ -1012,7 +1012,7 @@ const styles = StyleSheet.create({
   },
   hintText: {
     fontSize: 10,
-    color: Colors.textMuted,
+    color: Colors.textSecondary,
   },
   slotRow: {
     flexDirection: 'row',
@@ -1050,6 +1050,7 @@ const styles = StyleSheet.create({
   rowSubtitle: {
     fontSize: 11,
     fontWeight: '600',
+    color: Colors.textSecondary,
   },
   alertToneRow: {
     minHeight: 48,
@@ -1241,7 +1242,7 @@ const styles = StyleSheet.create({
   },
   staffEmail: {
     fontSize: 10,
-    color: Colors.textMuted,
+    color: Colors.textSecondary,
   },
   rolePill: {
     backgroundColor: Colors.primaryMuted,

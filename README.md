@@ -80,9 +80,11 @@ Terminal Settings → Sync & Data Health includes a persisted audio switch and a
 picker. Ten locally bundled WAV presets (Classic Chime, Kitchen Bell, Digital Beep, Loud Alarm,
 Subtle Ping, Double Gong, Restaurant Order Chime, High Pitch Alert, Marimba and Urgent Pulse) each
 have a play/stop preview button. The chosen tone is written through `saveTerminalSettings` to SQLite
-and reapplied on hydration, so it survives restarts. New PocketBase SSE orders with `new` status and
-locally simulated demo orders trigger the selected tone. Web playback follows the browser's autoplay
-policy; a preview tap first unlocks audio in browsers that block sound before interaction.
+and reapplied on hydration, so it survives restarts. A new PocketBase SSE order with `new` status
+opens a full-screen incoming-call overlay that repeats the selected tone until **Accept** (start
+prep) or **Reject** is tapped. Reject always routes through the mandatory reason templates before
+the cancellation is queued. Web playback follows the browser's autoplay policy; a preview tap first
+unlocks audio in browsers that block sound before interaction.
 
 ## PocketBase collections
 

@@ -23,7 +23,7 @@ import {
   isHistoricalDatasetCurrent,
 } from '../lib/seed';
 import * as db from '../db/sqlite';
-import { playAlertTone } from '../services/alertTones';
+import { startAlertToneLoop, stopAlertTone } from '../services/alertTones';
 import { appReducer, AppState, initialAppState } from './reducer';
 import {
   loginStaff,
@@ -51,12 +51,15 @@ import { flushOutbox, SyncFailure } from '../services/sync';
 import { describeSyncHint } from '../services/errors';
 import { runNetworkProbe, NetworkProbeResult } from '../services/networkProbe';
 import { fetchBranchSnapshot, BranchSnapshot } from '../services/data';
+import { IncomingOrderCallModal } from '../components/IncomingOrderCallModal';
+import { RejectOrderModal } from '../components/RejectOrderModal';
 import {
   Branch,
   ConnectionStatus,
   DaySchedule,
   DiningTable,
   MenuItem,
+  Order,
   OrderStatus,
   OutboxActionType,
   ReservationStatus,
@@ -176,7 +179,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const lastDiscardedRef = useRef<SyncFailure[]>([]);
   const lastFlushRef = useRef({ synced: 0, failed: 0 });
   const realtimeReadyRef = useRef(false);
+  const alertLoopToneRef = useRef<string | null>(null);
   const [realtimeEpoch, setRealtimeEpoch] = useState(0);
+  const [incomingCalls, setIncomingCalls] = useState<Order[]>([]);
+  const [rejectingOrder, setRejectingOrder] = useState<Order | null>(null);
+  const activeIncomingCall = incomingCalls[0] ?? null;
 
   useEffect(() => {
     stateRef.current = state;
@@ -367,11 +374,57 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void db.saveTerminalSettings(state.settings).catch(() => undefined);
   }, [state.hydrated, state.settings]);
 
-  const playIncomingAlert = useCallback((): void => {
-    const { alertToneId, soundAlertsEnabled } = stateRef.current.settings;
-    if (!soundAlertsEnabled) return;
-    void playAlertTone(alertToneId);
+  const enqueueIncomingCall = useCallback((order: Order): void => {
+    if (order.status !== 'new') return;
+    setIncomingCalls((current) =>
+      current.some((call) => call.id === order.id) ? current : [...current, order]
+    );
   }, []);
+
+  // A call belongs to one branch; never keep ringing after a branch change.
+  useEffect(() => {
+    setIncomingCalls([]);
+    setRejectingOrder(null);
+    stopAlertTone();
+  }, [state.session?.branchId]);
+
+  // Drop calls that were accepted, rejected or removed on another terminal.
+  useEffect(() => {
+    setIncomingCalls((current) => {
+      const next = current.filter((call) =>
+        state.orders.some((order) => order.id === call.id && order.status === 'new')
+      );
+      return next.length === current.length ? current : next;
+    });
+
+    setRejectingOrder((current) => {
+      if (!current) return current;
+      const live = state.orders.find((order) => order.id === current.id);
+      return live && live.status === 'new' ? current : null;
+    });
+  }, [state.orders]);
+
+  // Ring the configured tone until the active call is accepted/rejected, the
+  // terminal is muted, or the selected tone changes.
+  useEffect(() => {
+    if (!state.hydrated || !activeIncomingCall || !state.settings.soundAlertsEnabled) {
+      alertLoopToneRef.current = null;
+      stopAlertTone();
+      return;
+    }
+
+    const toneId = state.settings.alertToneId;
+    if (alertLoopToneRef.current === toneId) return;
+    alertLoopToneRef.current = toneId;
+    void startAlertToneLoop(toneId);
+  }, [
+    state.hydrated,
+    activeIncomingCall,
+    state.settings.soundAlertsEnabled,
+    state.settings.alertToneId,
+  ]);
+
+  useEffect(() => () => stopAlertTone(), []);
 
   const applyBranchSnapshot = useCallback(
     (branchId: string, snapshot: BranchSnapshot): void => {
@@ -487,7 +540,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           (entry) => entry.id === order.id
         );
         dispatch({ type: 'UPSERT_ORDER', order });
-        if (isNewOrder && order.status === 'new') playIncomingAlert();
+        if (isNewOrder && order.status === 'new') enqueueIncomingCall(order);
       },
       onMenuItem: (item) => dispatch({ type: 'UPSERT_MENU_ITEM', item }),
       onTable: (table) => dispatch({ type: 'SAVE_TABLE', table }),
@@ -528,7 +581,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [
     state.hydrated,
     state.session?.branchId,
-    playIncomingAlert,
+    enqueueIncomingCall,
     refreshRemoteDataSilently,
     realtimeEpoch,
   ]);
@@ -576,6 +629,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async (): Promise<void> => {
     remoteRequestIdRef.current += 1;
     remoteLoadedBranchRef.current = null;
+    setIncomingCalls([]);
+    setRejectingOrder(null);
+    stopAlertTone();
     await logoutStaff();
     dispatch({ type: 'LOGOUT' });
   }, []);
@@ -622,9 +678,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
       Date.now()
     );
     dispatch({ type: 'ADD_ORDER', order });
-    playIncomingAlert();
+    enqueueIncomingCall(order);
     await enqueue('CREATE_ORDER', `Order #${order.orderNumber} created`, { order });
-  }, [enqueue, playIncomingAlert]);
+  }, [enqueue, enqueueIncomingCall]);
+
+  const acceptIncomingCall = useCallback(
+    (order: Order): void => {
+      setRejectingOrder(null);
+      setIncomingCalls((current) => current.filter((call) => call.id !== order.id));
+      void updateOrderStatus(order.id, 'preparing');
+    },
+    [updateOrderStatus]
+  );
+
+  const requestRejectIncomingCall = useCallback((order: Order): void => {
+    setRejectingOrder(order);
+  }, []);
+
+  const confirmRejectIncomingCall = useCallback(
+    (reason: string): void => {
+      const target = rejectingOrder;
+      if (!target) return;
+      setRejectingOrder(null);
+      setIncomingCalls((current) => current.filter((call) => call.id !== target.id));
+      void rejectOrder(target.id, reason);
+    },
+    [rejectingOrder, rejectOrder]
+  );
 
   const setMenuItemStock = useCallback(
     async (itemId: string, inStock: boolean): Promise<void> => {
@@ -1238,7 +1318,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ]
   );
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+  return (
+    <AppContext.Provider value={value}>
+      {children}
+      <IncomingOrderCallModal
+        order={rejectingOrder ? null : activeIncomingCall}
+        onAccept={acceptIncomingCall}
+        onReject={requestRejectIncomingCall}
+      />
+      <RejectOrderModal
+        visible={rejectingOrder !== null}
+        order={rejectingOrder}
+        onClose={() => setRejectingOrder(null)}
+        onConfirm={confirmRejectIncomingCall}
+      />
+    </AppContext.Provider>
+  );
 }
 
 export function useApp(): AppContextValue {

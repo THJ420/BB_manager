@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
   hint: {
     fontSize: 12,
     lineHeight: 17,
-    color: Colors.textMuted,
+    color: Colors.textSecondary,
   },
   toneList: {
     gap: 8,
@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
   },
   toneDescription: {
     fontSize: 10.5,
-    color: Colors.textMuted,
+    color: Colors.textSecondary,
   },
   previewButton: {
     width: Layout.minTouch,

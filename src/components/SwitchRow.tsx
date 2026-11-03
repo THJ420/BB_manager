@@ -68,6 +68,6 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 11,
     lineHeight: 15,
-    color: Colors.textMuted,
+    color: Colors.textSecondary,
   },
 });

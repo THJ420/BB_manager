@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 12,
     lineHeight: 16,
-    color: Colors.textMuted,
+    color: Colors.textSecondary,
   },
   closeButton: {
     width: Layout.minTouch,

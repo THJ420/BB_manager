@@ -54,7 +54,7 @@ describe('menu record mapping', () => {
         category: 'Burgers',
         description: 'Two smashed patties',
         price: 14.5,
-        currency: 'USD',
+        currency: 'PLN',
         in_stock: false,
         is_visible: true,
         prep_minutes: 12,
