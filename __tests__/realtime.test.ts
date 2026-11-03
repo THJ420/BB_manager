@@ -141,4 +141,103 @@ describe('PocketBase realtime bridge', () => {
     expect(handlers.onDelete).not.toHaveBeenCalled();
     cleanup();
   });
+
+  it('dispatches a newly created website order to the inbound-call handler', async () => {
+    const handlers = createHandlers();
+    const cleanup = await startRealtime('branch_dt_01', handlers);
+
+    subscriptionFor('orders').emit({
+      action: 'create',
+      record: {
+        id: 'ord_9001',
+        branch_id: 'branch_dt_01',
+        order_number: '9001',
+        customer_name: 'Website Guest',
+        customer_phone: '+48 500 100 200',
+        status: 'new',
+        items: JSON.stringify([{ id: 'i1', name: 'Kebab', quantity: 2, unitPrice: 24 }]),
+        total_amount: 48,
+        pickup_code: '4821',
+        channel: 'online',
+        created: '2026-11-04T00:00:00.000Z',
+      },
+    });
+
+    expect(handlers.onOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'ord_9001',
+        branchId: 'branch_dt_01',
+        status: 'new',
+        orderNumber: '9001',
+      })
+    );
+    cleanup();
+  });
+
+  it('accepts uppercase/legacy action verbs instead of dropping the insert', async () => {
+    const handlers = createHandlers();
+    const cleanup = await startRealtime('branch_dt_01', handlers);
+
+    subscriptionFor('orders').emit({
+      action: 'INSERT',
+      record: {
+        id: 'ord_9002',
+        branch_id: 'branch_dt_01',
+        order_number: '9002',
+        status: 'new',
+        items: '[]',
+        total_amount: 12,
+        pickup_code: '1111',
+      },
+    });
+
+    expect(handlers.onOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'ord_9002', status: 'new' })
+    );
+    cleanup();
+  });
+
+  it('keeps a matching branch when the relation id has surrounding whitespace', async () => {
+    const handlers = createHandlers();
+    const cleanup = await startRealtime('branch_dt_01', handlers);
+
+    subscriptionFor('orders').emit({
+      action: 'create',
+      record: {
+        id: 'ord_9003',
+        branch_id: ' branch_dt_01 ',
+        order_number: '9003',
+        status: 'new',
+        items: '[]',
+        total_amount: 9,
+        pickup_code: '2222',
+      },
+    });
+
+    expect(handlers.onOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'ord_9003', branchId: 'branch_dt_01' })
+    );
+    cleanup();
+  });
+
+  it('ignores an order created for a genuinely different branch', async () => {
+    const handlers = createHandlers();
+    const cleanup = await startRealtime('branch_dt_01', handlers);
+
+    subscriptionFor('orders').emit({
+      action: 'create',
+      record: {
+        id: 'ord_9004',
+        branch_id: 'branch_ub_02',
+        order_number: '9004',
+        status: 'new',
+        items: '[]',
+        total_amount: 9,
+        pickup_code: '3333',
+      },
+    });
+
+    expect(handlers.onOrder).not.toHaveBeenCalled();
+    cleanup();
+  });
 });

@@ -1,6 +1,12 @@
 import PocketBase, { AsyncAuthStore } from 'pocketbase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { installEventSourcePolyfill } from './eventSource';
+
+// React Native has no global EventSource. PocketBase's realtime service opens its
+// SSE channel with `new EventSource(...)`, so install the XHR-based polyfill
+// *before* the client is constructed or the first `collection().subscribe()`.
+installEventSourcePolyfill();
 
 const AUTH_STORAGE_KEY = 'bb_pocketbase_auth';
 // A trailing slash would make every request hit `//api/...`, which PocketBase

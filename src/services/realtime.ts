@@ -41,8 +41,17 @@ type Subscription = [
   handle: (record: RecordModel) => void,
 ];
 
-function recordBranchId(record: RecordModel): string {
-  return typeof record.branch_id === 'string' ? record.branch_id : '';
+function recordBranchId(record: RecordModel | null | undefined): string {
+  if (!record) return '';
+  const value = record.branch_id;
+  if (typeof value === 'string') return value.trim();
+  // A relation field configured with maxSelect > 1 is serialized as an array;
+  // accept the first id instead of silently dropping the realtime event.
+  if (Array.isArray(value)) {
+    const first = value.find((entry): entry is string => typeof entry === 'string');
+    return typeof first === 'string' ? first.trim() : '';
+  }
+  return '';
 }
 
 /**
@@ -65,8 +74,11 @@ export async function startRealtime(
   const filter = pb.filter('branch_id = {:branchId}', { branchId: scopedBranchId });
   const subscribeOptions = { filter };
 
-  const belongsToBranch = (record: RecordModel): boolean =>
-    recordBranchId(record) === scopedBranchId;
+  const belongsToBranch = (record: RecordModel): boolean => {
+    const recordBranch = recordBranchId(record).toLowerCase();
+    if (!recordBranch) return false;
+    return recordBranch === scopedBranchId.trim().toLowerCase();
+  };
 
   const subscriptions: Subscription[] = [
     [
@@ -124,15 +136,28 @@ export async function startRealtime(
       const unsubscribe = await pb
         .collection(collection)
         .subscribe('*', (event) => {
-          if (!belongsToBranch(event.record)) return;
+          const record = (event?.record ?? null) as RecordModel | null;
+          if (!record || !belongsToBranch(record)) return;
           try {
-            if (event.action === 'delete') {
+            // PocketBase emits lowercase actions, but some proxies/webhook
+            // bridges replay uppercase SQL verbs. Normalise before dispatching.
+            const action = String(event?.action ?? '').toLowerCase();
+            if (action === 'delete' || action === 'remove') {
               // A deleted record still carries its branch, so the gate above
               // keeps another branch's deletion from touching local state.
-              if (entity) handlers.onDelete(entity, event.record.id);
+              if (entity) handlers.onDelete(entity, record.id);
               return;
             }
-            handle(event.record);
+            // 'create' | 'insert' | 'update' | 'patch' all flow into the mapper.
+            // Normalise the relation id so downstream filters/comparisons see the
+            // canonical (trimmed, single) branch id even if the wire value was
+            // padded or serialized as an array.
+            const canonicalBranchId = recordBranchId(record);
+            const normalized =
+              record.branch_id === canonicalBranchId
+                ? record
+                : ({ ...record, branch_id: canonicalBranchId } as RecordModel);
+            handle(normalized);
           } catch (error) {
             console.warn(`Unable to apply realtime ${collection} event`, error);
           }

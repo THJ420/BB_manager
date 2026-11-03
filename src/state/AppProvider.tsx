@@ -180,6 +180,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const lastFlushRef = useRef({ synced: 0, failed: 0 });
   const realtimeReadyRef = useRef(false);
   const alertLoopToneRef = useRef<string | null>(null);
+  const callBranchRef = useRef<string | null>(null);
   const [realtimeEpoch, setRealtimeEpoch] = useState(0);
   const [incomingCalls, setIncomingCalls] = useState<Order[]>([]);
   const [rejectingOrder, setRejectingOrder] = useState<Order | null>(null);
@@ -381,33 +382,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  // A call belongs to one branch; never keep ringing after a branch change.
+  // A call belongs to one branch; never keep ringing after a *real* branch
+  // change. The first assignment only records the branch — clearing on the
+  // undefined → hydrated transition used to wipe a call that had just arrived.
   useEffect(() => {
+    const branchId = state.session?.branchId ?? null;
+    if (!branchId) return;
+    if (callBranchRef.current === null) {
+      callBranchRef.current = branchId;
+      return;
+    }
+    if (callBranchRef.current === branchId) return;
+    callBranchRef.current = branchId;
     setIncomingCalls([]);
     setRejectingOrder(null);
     stopAlertTone();
   }, [state.session?.branchId]);
 
   // Drop calls that were accepted, rejected or removed on another terminal.
+  // A call whose record is temporarily absent from `state.orders` (a snapshot
+  // fetched at connect time can race ahead of the SSE insert) is kept: the
+  // modal must not vanish while the ticket is still unacknowledged.
   useEffect(() => {
     setIncomingCalls((current) => {
-      const next = current.filter((call) =>
-        state.orders.some((order) => order.id === call.id && order.status === 'new')
-      );
+      const next = current.filter((call) => {
+        const live = state.orders.find((order) => order.id === call.id);
+        return !live || live.status === 'new';
+      });
       return next.length === current.length ? current : next;
     });
 
     setRejectingOrder((current) => {
       if (!current) return current;
       const live = state.orders.find((order) => order.id === current.id);
-      return live && live.status === 'new' ? current : null;
+      if (!live) return current;
+      return live.status === 'new' ? current : null;
     });
   }, [state.orders]);
 
   // Ring the configured tone until the active call is accepted/rejected, the
-  // terminal is muted, or the selected tone changes.
+  // reject-reason dialog is open, the terminal is muted, or the tone changes.
   useEffect(() => {
-    if (!state.hydrated || !activeIncomingCall || !state.settings.soundAlertsEnabled) {
+    if (
+      !state.hydrated ||
+      !activeIncomingCall ||
+      rejectingOrder ||
+      !state.settings.soundAlertsEnabled
+    ) {
       alertLoopToneRef.current = null;
       stopAlertTone();
       return;
@@ -420,6 +441,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [
     state.hydrated,
     activeIncomingCall,
+    rejectingOrder,
     state.settings.soundAlertsEnabled,
     state.settings.alertToneId,
   ]);
@@ -536,6 +558,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     void startRealtime(branchId, {
       onOrder: (order) => {
+        // Invalidate any snapshot that was already in flight when this insert
+        // arrived. Otherwise an older REST response could land afterwards and
+        // replace the live board (and the inbound-call record) with stale data.
+        remoteRequestIdRef.current += 1;
         const isNewOrder = !stateRef.current.orders.some(
           (entry) => entry.id === order.id
         );
@@ -1092,6 +1118,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!branchId) return;
       void probeConnection().then((reachable) => {
         if (!reachable) return;
+        // The OS may have silently torn down the SSE socket while the app was
+        // suspended without firing an error. Rebuilding the subscriptions is
+        // cheap and guarantees live order alerts resume on the first frame.
+        setRealtimeEpoch((epoch) => epoch + 1);
         void refreshRemoteDataSilently(branchId);
         void syncOutboxNow();
       });
