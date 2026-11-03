@@ -295,6 +295,32 @@ describe('sync outbox handlers', () => {
     expect(result.failures[0].error.kind).toBe('rule');
   });
 
+  it('deletes a menu item through PocketBase', async () => {
+    const remove = jest.fn(async () => undefined);
+    useCollection('menu_items', { delete: remove });
+
+    const result = await flushOutbox([
+      entry('DELETE_MENU_ITEM', { itemId: 'm_01', branchId: 'branch_dt_01' }),
+    ]);
+
+    expect(result.failedIds).toEqual([]);
+    expect(result.discarded).toEqual([]);
+    expect(remove).toHaveBeenCalledWith('m_01');
+  });
+
+  it('refuses a queued delete that names another branch', async () => {
+    const remove = jest.fn(async () => undefined);
+    useCollection('menu_items', { delete: remove });
+
+    const result = await flushOutbox([
+      entry('DELETE_MENU_ITEM', { itemId: 'm_01', branchId: 'branch_ub_02' }),
+    ]);
+
+    expect(remove).not.toHaveBeenCalled();
+    expect(result.failedIds).toEqual(['act_1_DELETE_MENU_ITEM']);
+    expect(result.failures[0].error.kind).toBe('forbidden');
+  });
+
   it('stamps the authenticated branch onto a menu stock toggle', async () => {
     const update = jest.fn(async () => undefined);
     useCollection('menu_items', { update });

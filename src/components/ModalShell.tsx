@@ -35,47 +35,63 @@ export function ModalShell({
       visible={visible}
       transparent
       animationType="fade"
-      statusBarTranslucent
       onRequestClose={onClose}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.overlay}
-      >
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        <View style={styles.card}>
-          <View style={styles.header}>
-            <View style={styles.headerText}>
-              <Text style={styles.title}>{title}</Text>
-              {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      {/* The backdrop is a sibling behind the sheet. Keeping it out of the
+          KeyboardAvoidingView prevents it from winning the touch responder on
+          Android (a full-screen absolute Pressable above the sheet swallows
+          every tap on inputs). */}
+      <View style={styles.overlay}>
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+          accessible={false}
+          importantForAccessibility="no"
+          testID="modal_backdrop"
+        />
+
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.center}
+          pointerEvents="box-none"
+        >
+          <View style={styles.card}>
+            <View style={styles.header}>
+              <View style={styles.headerText}>
+                <Text style={styles.title}>{title}</Text>
+                {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+              </View>
+              <Pressable
+                onPress={onClose}
+                accessibilityRole="button"
+                accessibilityLabel="Close dialog"
+                hitSlop={8}
+                style={({ pressed }) => [styles.closeButton, pressed && styles.closePressed]}
+              >
+                <Text style={styles.closeText}>✕</Text>
+              </Pressable>
             </View>
-            <Pressable
-              onPress={onClose}
-              accessibilityRole="button"
-              accessibilityLabel="Close dialog"
-              hitSlop={8}
-              style={({ pressed }) => [styles.closeButton, pressed && styles.closePressed]}
-            >
-              <Text style={styles.closeText}>✕</Text>
-            </Pressable>
+
+            {scroll ? (
+              <ScrollView
+                style={styles.scroll}
+                contentContainerStyle={styles.content}
+                // "always" lets the first tap focus an input instead of being
+                // consumed to dismiss the keyboard (Android default is "never").
+                keyboardShouldPersistTaps="always"
+                keyboardDismissMode="none"
+                showsVerticalScrollIndicator={false}
+              >
+                {children}
+              </ScrollView>
+            ) : (
+              <View style={styles.content}>{children}</View>
+            )}
+
+            {footer ? <View style={styles.footer}>{footer}</View> : null}
           </View>
-
-          {scroll ? (
-            <ScrollView
-              style={styles.scroll}
-              contentContainerStyle={styles.content}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              {children}
-            </ScrollView>
-          ) : (
-            <View style={styles.content}>{children}</View>
-          )}
-
-          {footer ? <View style={styles.footer}>{footer}</View> : null}
-        </View>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
@@ -84,6 +100,9 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: Colors.overlay,
+  },
+  center: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: Spacing.md,
@@ -91,7 +110,7 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 520,
-    maxHeight: '88%',
+    maxHeight: '100%',
     backgroundColor: Colors.surface,
     borderRadius: Radius.xl,
     borderWidth: 1,

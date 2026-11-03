@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActionButton } from '../../../components/ActionButton';
+import { DialogModal } from '../../../components/DialogModal';
 import { HorizontalFilterChips } from '../../../components/HorizontalFilterChips';
 import { MenuItemCard } from '../../../components/MenuItemCard';
 import { MenuItemEditorModal } from '../../../components/MenuItemEditorModal';
@@ -9,20 +10,25 @@ import { ScreenHeader } from '../../../components/ScreenHeader';
 import { TextField } from '../../../components/TextField';
 import { filterMenu, menuCategoryOptions } from '../../../lib/domain';
 import { useApp } from '../../../state/AppProvider';
-import { canCreateMenuItems, canEditMenuDetails } from '../../../services/branchScope';
+import {
+  canCreateMenuItems,
+  canDeleteMenuItems,
+  canEditMenuDetails,
+} from '../../../services/branchScope';
 import { Colors, Spacing } from '../../../theme/colors';
 import { MenuItem } from '../../../types';
 
 export default function MenuStockScreen() {
-  const { state, setMenuItemStock, saveMenuItem } = useApp();
+  const { state, setMenuItemStock, saveMenuItem, deleteMenuItem } = useApp();
   const role = state.session?.role ?? '';
   const canCreate = canCreateMenuItems(role);
-  const canEditDetails = canEditMenuDetails(role);
+  const canDelete = canDeleteMenuItems(role);
 
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [editorVisible, setEditorVisible] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<MenuItem | null>(null);
 
   const categoryOptions = useMemo(
     () => menuCategoryOptions(state.menuItems),
@@ -109,12 +115,44 @@ export default function MenuStockScreen() {
         visible={editorVisible}
         item={editingItem}
         branchId={state.activeBranch.id}
-        canEditDetails={canEditDetails}
+        // Creating needs a name, so the role that may create also gets the
+        // detail fields; editing keeps them manager-only.
+        canEditDetails={editingItem ? canEditMenuDetails(role) : canCreate}
+        canDelete={editingItem !== null && canDelete}
+        onDelete={() => {
+          if (!editingItem) return;
+          setDeleteTarget(editingItem);
+          setEditorVisible(false);
+          setEditingItem(null);
+        }}
         onClose={() => {
           setEditorVisible(false);
           setEditingItem(null);
         }}
         onSave={(item) => void saveMenuItem(item)}
+      />
+
+      <DialogModal
+        visible={deleteTarget !== null}
+        title="Delete Menu Item"
+        message={
+          deleteTarget
+            ? `Remove “${deleteTarget.name}” from the menu and the website?`
+            : ''
+        }
+        onRequestClose={() => setDeleteTarget(null)}
+        actions={[
+          { label: 'Cancel', variant: 'outline', onPress: () => setDeleteTarget(null) },
+          {
+            label: 'Delete',
+            variant: 'danger',
+            onPress: () => {
+              const target = deleteTarget;
+              setDeleteTarget(null);
+              if (target) void deleteMenuItem(target.id);
+            },
+          },
+        ]}
       />
     </SafeAreaView>
   );

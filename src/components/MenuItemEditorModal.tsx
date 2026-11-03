@@ -19,6 +19,9 @@ export interface MenuItemEditorModalProps {
   onSave: (item: MenuItem) => void;
   /** Managers only; other roles are rejected by the PocketBase menu guard. */
   canEditDetails?: boolean;
+  /** Managers and kitchen leads may delete, per menu_items.deleteRule. */
+  canDelete?: boolean;
+  onDelete?: () => void;
 }
 
 type PhotoSource = 'camera' | 'library';
@@ -30,6 +33,8 @@ export function MenuItemEditorModal({
   onClose,
   onSave,
   canEditDetails = true,
+  canDelete = false,
+  onDelete,
 }: MenuItemEditorModalProps) {
   const [name, setName] = useState('');
   const [category, setCategory] = useState('Burgers');
@@ -322,6 +327,18 @@ export function MenuItemEditorModal({
           inactiveColor={Colors.textSecondary}
         />
       </View>
+
+      {canDelete && onDelete ? (
+        <>
+          <View style={styles.divider} />
+          <ActionButton
+            label="DELETE ITEM"
+            variant="danger"
+            onPress={onDelete}
+            testID="menu_editor_delete"
+          />
+        </>
+      ) : null}
     </ModalShell>
   );
 }

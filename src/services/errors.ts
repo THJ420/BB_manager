@@ -115,7 +115,10 @@ export function describePocketBaseError(error: unknown): DescribedPocketBaseErro
   const detail = fieldDetail || raw;
 
   let kind: PocketBaseErrorKind = 'unknown';
-  if (source.isAbort === true) {
+  if (source.name === 'BranchScopeError') {
+    // Raised locally before any HTTP call; the entry names another branch.
+    kind = 'forbidden';
+  } else if (source.isAbort === true) {
     kind = 'aborted';
   } else if (status === 0) {
     kind = 'network';

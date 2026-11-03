@@ -51,10 +51,21 @@ export function TextField({
   return (
     <View style={[styles.group, style]}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
-      <View style={[styles.field, multiline && styles.fieldMultiline, Boolean(errorText) && styles.fieldError]}>
+      <View
+        style={[
+          styles.field,
+          multiline && styles.fieldMultiline,
+          Boolean(errorText) && styles.fieldError,
+          !editable && styles.fieldDisabled,
+        ]}
+      >
         {prefix ? <Text style={styles.prefix}>{prefix}</Text> : null}
         <TextInput
-          style={[styles.input, multiline && styles.inputMultiline]}
+          style={[
+            styles.input,
+            multiline && styles.inputMultiline,
+            !editable && styles.inputDisabled,
+          ]}
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
@@ -106,6 +117,12 @@ const styles = StyleSheet.create({
   },
   fieldError: {
     borderColor: Colors.error,
+  },
+  fieldDisabled: {
+    opacity: 0.55,
+  },
+  inputDisabled: {
+    color: Colors.textMuted,
   },
   prefix: {
     fontSize: 15,

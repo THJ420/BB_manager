@@ -67,6 +67,7 @@ export type AppAction =
   | { type: 'UPDATE_ORDER_STATUS'; orderId: string; status: OrderStatus; at: string }
   | { type: 'SET_MENU'; items: MenuItem[] }
   | { type: 'UPSERT_MENU_ITEM'; item: MenuItem }
+  | { type: 'REMOVE_MENU_ITEM'; itemId: string }
   | { type: 'SET_MENU_STOCK'; itemId: string; inStock: boolean; at: string }
   | { type: 'SET_MENU_PRICE'; itemId: string; price: number; at: string }
   | { type: 'SET_TABLES'; tables: DiningTable[] }
@@ -212,6 +213,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           : [action.item, ...state.menuItems],
       };
     }
+
+    case 'REMOVE_MENU_ITEM':
+      return {
+        ...state,
+        menuItems: state.menuItems.filter((item) => item.id !== action.itemId),
+      };
 
     case 'SET_MENU_STOCK':
       return {

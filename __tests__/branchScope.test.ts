@@ -14,6 +14,7 @@ import {
   BranchScopeError,
   assignedBranchId,
   canCreateMenuItems,
+  canDeleteMenuItems,
   canEditMenuDetails,
   branchScopeFilter,
   clearAssignedBranchId,
@@ -91,6 +92,9 @@ describe('branch scope enforcement', () => {
     expect(canEditMenuDetails('manager')).toBe(true);
     expect(canEditMenuDetails('kitchen_lead')).toBe(false);
     expect(canEditMenuDetails('floor_staff')).toBe(false);
+    expect(canDeleteMenuItems('manager')).toBe(true);
+    expect(canDeleteMenuItems('kitchen_lead')).toBe(true);
+    expect(canDeleteMenuItems('floor_staff')).toBe(false);
   });
 
   it('builds realtime filters from the authenticated branch only', () => {

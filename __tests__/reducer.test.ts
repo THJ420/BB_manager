@@ -269,4 +269,12 @@ describe('appReducer', () => {
 
     expect(appReducer(queued, { type: 'CLEAR_OUTBOX' }).outbox).toEqual([]);
   });
+  it('removes a deleted menu item from local state', () => {
+    const seeded = hydratedState();
+    const victim = seeded.menuItems[0];
+    const next = appReducer(seeded, { type: 'REMOVE_MENU_ITEM', itemId: victim.id });
+
+    expect(next.menuItems).toHaveLength(seeded.menuItems.length - 1);
+    expect(next.menuItems.find((item) => item.id === victim.id)).toBeUndefined();
+  });
 });

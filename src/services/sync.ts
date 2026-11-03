@@ -64,6 +64,7 @@ const ACTION_TARGETS: Record<
   UPDATE_MENU_PRICE: { collection: COLLECTIONS.menuItems, idKey: 'itemId' },
   CREATE_MENU_ITEM: { collection: COLLECTIONS.menuItems, nestedKey: 'item' },
   UPDATE_MENU_ITEM: { collection: COLLECTIONS.menuItems, nestedKey: 'item' },
+  DELETE_MENU_ITEM: { collection: COLLECTIONS.menuItems, idKey: 'itemId' },
   SAVE_TABLE: { collection: COLLECTIONS.tables, nestedKey: 'table' },
   UPDATE_RESERVATION_STATUS: {
     collection: COLLECTIONS.reservations,
@@ -300,6 +301,17 @@ async function applyOutboxEntry(entry: OutboxEntry): Promise<void> {
       const item = entry.payload.item as MenuItem | undefined;
       if (!item) return;
       await saveMenuRecord(item, 'update', entry.payload.imageRemoved === true);
+      return;
+    }
+    case 'DELETE_MENU_ITEM': {
+      const itemId = String(entry.payload.itemId ?? '');
+      if (!itemId) return;
+      // Reject a stale queued delete for another branch before touching the API.
+      assertBranchScope(
+        entry.payload.branchId ? String(entry.payload.branchId) : undefined
+      );
+      console.log(`[payload] menu_items delete ${itemId}`);
+      await pb.collection(COLLECTIONS.menuItems).delete(itemId);
       return;
     }
     case 'SAVE_TABLE': {

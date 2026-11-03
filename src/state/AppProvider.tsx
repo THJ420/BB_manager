@@ -37,7 +37,11 @@ import {
   pocketBaseDiagnostics,
   PocketBaseDiagnostics,
 } from '../services/pocketbase';
-import { assignedBranchId, canCreateMenuItems } from '../services/branchScope';
+import {
+  assignedBranchId,
+  canCreateMenuItems,
+  canDeleteMenuItems,
+} from '../services/branchScope';
 import { startRealtime } from '../services/realtime';
 import { flushOutbox, SyncFailure } from '../services/sync';
 import { describeSyncHint } from '../services/errors';
@@ -96,6 +100,7 @@ interface AppContextValue {
   setMenuItemStock: (itemId: string, inStock: boolean) => Promise<void>;
   setMenuItemPrice: (itemId: string, price: number) => Promise<void>;
   saveMenuItem: (item: MenuItem) => Promise<void>;
+  deleteMenuItem: (itemId: string) => Promise<void>;
   saveTable: (table: DiningTable) => Promise<void>;
   updateReservationStatus: (
     reservationId: string,
@@ -594,6 +599,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [enqueue]
   );
 
+  const deleteMenuItem = useCallback(
+    async (itemId: string): Promise<void> => {
+      const item = stateRef.current.menuItems.find((entry) => entry.id === itemId);
+      const role = stateRef.current.session?.role ?? '';
+      if (!canDeleteMenuItems(role)) {
+        console.error(
+          `[menu] role "${role || 'unknown'}" cannot delete menu items — action not queued.`
+        );
+        return;
+      }
+      dispatch({ type: 'REMOVE_MENU_ITEM', itemId });
+      await enqueue(
+        'DELETE_MENU_ITEM',
+        `Menu item ${item?.name ?? itemId} deleted`,
+        { itemId, branchId: stateRef.current.activeBranch.id }
+      );
+    },
+    [enqueue]
+  );
+
   const saveTable = useCallback(
     async (table: DiningTable): Promise<void> => {
       dispatch({ type: 'SAVE_TABLE', table });
@@ -980,6 +1005,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setMenuItemStock,
       setMenuItemPrice,
       saveMenuItem,
+      deleteMenuItem,
       saveTable,
       updateReservationStatus,
       toggleStoreOpen,
@@ -1002,6 +1028,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setMenuItemStock,
       setMenuItemPrice,
       saveMenuItem,
+      deleteMenuItem,
       saveTable,
       updateReservationStatus,
       toggleStoreOpen,
