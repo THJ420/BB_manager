@@ -647,7 +647,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // just switch the optimistic card back to its placeholder.
       const scopedItem: MenuItem = {
         ...item,
-        branchId: assertBranchScope(stateRef.current.activeBranch.id),
+        branchId: isPocketBaseConfigured
+          ? assertBranchScope(stateRef.current.activeBranch.id)
+          : stateRef.current.activeBranch.id,
       };
       const imageRemoved = Boolean(existing?.imageUrl) && !scopedItem.imageUrl;
       dispatch({ type: 'UPSERT_MENU_ITEM', item: scopedItem });
@@ -694,7 +696,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       const scopedTable: DiningTable = {
         ...table,
-        branchId: assertBranchScope(stateRef.current.activeBranch.id),
+        branchId: isPocketBaseConfigured
+          ? assertBranchScope(stateRef.current.activeBranch.id)
+          : stateRef.current.activeBranch.id,
       };
       dispatch({ type: 'SAVE_TABLE', table: scopedTable });
       await enqueue('SAVE_TABLE', `Table ${scopedTable.name} saved`, {
