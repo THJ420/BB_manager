@@ -8,6 +8,10 @@ name: Build Android APK (EAS local)
 # Required repository secret:
 #   EXPO_TOKEN  - Expo personal access token (https://expo.dev/settings/access-tokens)
 #
+# If EXPO_TOKEN is missing or invalid, the workflow falls back to a plain Gradle
+# release build (debug-signed APK) so it still produces an installable artifact.
+# Add the secret for a managed EAS-signed APK.
+#
 # Optional repository variable:
 #   EXPO_PUBLIC_POCKETBASE_URL - defaults to https://pocket.enjoydonerkebab.pl
 #
@@ -52,6 +56,8 @@ jobs:
 
       # RN 0.88 + AGP 9 need more heap than the 2 GB default on a cold runner.
       GRADLE_OPTS: "-Xmx4g -XX:MaxMetaspaceSize=1g -Dorg.gradle.daemon=false"
+      # Metro's release bundle can exceed the default Node heap on CI.
+      NODE_OPTIONS: "--max-old-space-size=4096"
 
     steps:
       - name: Check out repository
@@ -149,16 +155,22 @@ jobs:
       - name: Install EAS CLI
         run: npm install --global eas-cli
 
-      - name: Verify Expo authentication
+      - name: Detect Expo credentials
+        id: expo_auth
         shell: bash
         run: |
-          set -euo pipefail
-          if [ -z "${EXPO_TOKEN:-}" ]; then
-            echo "::error title=EXPO_TOKEN is missing::Add a repository secret named EXPO_TOKEN (Settings > Secrets and variables > Actions) containing an Expo personal access token, then re-run this workflow."
-            exit 1
-          fi
+          # EAS local builds normally require an Expo login/EXPO_TOKEN. When the
+          # secret is absent (or invalid) fall back to a plain Gradle release
+          # build so the workflow still produces an installable APK.
+          set +e
           eas --version
-          eas whoami
+          if [ -n "${EXPO_TOKEN:-}" ] && eas whoami; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::EXPO_TOKEN detected. Building with EAS local (managed credentials)."
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=EXPO_TOKEN not available::Building with Gradle fallback (debug-signed APK). Add an EXPO_TOKEN repository secret for a managed EAS-signed build."
+          fi
 
       - name: Write build environment
         shell: bash
@@ -170,6 +182,11 @@ jobs:
           cat .env
 
       - name: Build APK locally with EAS
+        id: eas_build
+        if: steps.expo_auth.outputs.available == 'true'
+        # If EAS fails for a credentials/cloud reason, still try the Gradle
+        # fallback below instead of failing the whole workflow immediately.
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -181,9 +198,39 @@ jobs:
             --non-interactive \
             --output "./build/bb-manager-$EAS_BUILD_PROFILE.apk"
 
+      - name: Build APK with Gradle fallback
+        id: gradle_build
+        if: steps.expo_auth.outputs.available != 'true' || steps.eas_build.outcome == 'failure'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+
+          # No Expo token (or EAS failed): generate the native project and build
+          # a standalone release APK with Gradle. The Expo-generated release
+          # build type is signed with the debug keystore, so this APK installs on
+          # a device without requiring EAS credentials.
+          npx expo prebuild --platform android --clean --no-install
+          (
+            cd android
+            ./gradlew assembleRelease --no-daemon \
+              -Pandroid.enableMinifyInReleaseBuilds=false \
+              -Pandroid.enableShrinkResourcesInReleaseBuilds=false
+          )
+
+          APK_PATH="$(find android/app/build/outputs/apk -type f -name '*.apk' -print -quit)"
+          if [ -z "$APK_PATH" ]; then
+            echo "::error::Gradle did not produce an APK"
+            exit 1
+          fi
+          cp "$APK_PATH" "build/bb-manager-$EAS_BUILD_PROFILE.apk"
+          echo "Gradle fallback APK: $APK_PATH"
+
       - name: Collect APK
         if: always()
         shell: bash
+        env:
+          EAS_OUTCOME: ${{ steps.eas_build.outcome }}
         run: |
           set -euo pipefail
           mkdir -p build
@@ -208,6 +255,10 @@ jobs:
               echo ""
               echo "Profile: \`$EAS_BUILD_PROFILE\`"
               echo ""
+              if [ "$EAS_OUTCOME" != "success" ]; then
+                echo "> **Fallback build:** EXPO_TOKEN was not available (or the EAS build failed), so this APK was compiled with Gradle and signed with the debug keystore. Add the \`EXPO_TOKEN\` repository secret for a managed EAS-signed APK."
+                echo ""
+              fi
               echo "| File | Size | SHA-256 |"
               echo "| --- | --- | --- |"
               for apk in build/*.apk; do
