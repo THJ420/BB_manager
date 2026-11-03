@@ -11,6 +11,7 @@ import {
 import { buildMenuItemWritePayload } from './uploads';
 import {
   toBranchSettingsRecord,
+  toMenuItemRecord,
   toOrderRecord,
   toStoreRecord,
   toTableRecord,
@@ -178,9 +179,19 @@ async function menuWritePayload(
 ): Promise<Record<string, unknown> | FormData> {
   const scopedItem: MenuItem = { ...item, branchId: assertBranchScope(item.branchId) };
   const payload = await buildMenuItemWritePayload(scopedItem, { clearImage: removeImage });
-  return payload instanceof FormData
-    ? payload
-    : scopeWritePayload(COLLECTIONS.menuItems, payload, mode);
+
+  if (payload instanceof FormData) {
+    console.log(
+      `[payload] menu_items ${mode} ${scopedItem.id} (multipart) ` +
+        JSON.stringify(toMenuItemRecord(scopedItem)) +
+        ' + image file'
+    );
+    return payload;
+  }
+
+  const scoped = scopeWritePayload(COLLECTIONS.menuItems, payload, mode);
+  console.log(`[payload] menu_items ${mode} ${scopedItem.id} ${JSON.stringify(scoped)}`);
+  return scoped;
 }
 
 async function saveMenuRecord(
@@ -214,13 +225,17 @@ async function saveTableRecord(table: DiningTable): Promise<void> {
     toTableRecord(table),
     'update'
   );
+  console.log(`[payload] tables update ${table.id} ${JSON.stringify(payload)}`);
   try {
     await pb.collection(COLLECTIONS.tables).update(table.id, payload);
   } catch (error) {
     if (!isNotFoundError(error)) throw error;
-    await pb
-      .collection(COLLECTIONS.tables)
-      .create(withRecordId(scopeWritePayload(COLLECTIONS.tables, toTableRecord(table), 'create'), table.id));
+    const createPayload = withRecordId(
+      scopeWritePayload(COLLECTIONS.tables, toTableRecord(table), 'create'),
+      table.id
+    );
+    console.log(`[payload] tables create ${table.id} ${JSON.stringify(createPayload)}`);
+    await pb.collection(COLLECTIONS.tables).create(createPayload);
   }
 }
 
