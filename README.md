@@ -189,6 +189,49 @@ npx tsc --noEmit        # zero TypeScript errors
 npm test                # ids, mappers, domain, analytics, reducer, formatting and alert-tone suites
 ```
 
+## Troubleshooting sync ("OFFLINE QUEUED")
+
+The outbox badge reflects connectivity plus queue health:
+
+- `OFFLINE QUEUED` — the host was unreachable (network/TLS). Entries retry every 30 s.
+- `POLLING` + `N queued` — PocketBase answered but **rejected** the writes. This is a
+  rules/auth problem, not a network problem; the queue will never drain by itself.
+- `SSE LIVE` — writes are landing.
+
+Run the in-app probe: **Settings → RUN SYNC DIAGNOSTICS**. It force-flushes the queue and
+prints the endpoint, token expiry, staff role, branch, HTTP status, PocketBase message,
+per-field validation detail and a hint for every rejected entry (`adb logcat` or the
+`expo start` console).
+
+Or reproduce the same traffic from a workstation:
+
+```bash
+node scripts/diagnose-sync.mjs --email <staff email> --password '<password>'
+```
+
+The script checks `/api/health`, logs in, verifies the `branch_id` claim, lists the branch
+menu, then creates / reprices / deletes a temporary item using the exact payload the
+outbox sends — and prints the server's rejection verbatim.
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `kind=rule status=400 "Failed to create record."` on `CREATE_MENU_ITEM` | `menu_items.createRule` allows `manager`/`kitchen_lead` only — `floor_staff` can never create | sign in as a manager, or promote the account |
+| `kind=auth status=401` / `kind=forbidden status=403` | staff token expired (PocketBase issues 5-day tokens) or account disabled | sign out and sign in again |
+| `kind=not-found status=404` on an update | the item's create never landed, so the record does not exist | clear the failed create first, then re-edit |
+| `kind=validation` with field detail | payload/ID constraint (IDs must be 15 lowercase alphanumerics) | fix the field named in `detail` |
+| `OFFLINE QUEUED` with `status=0` | device cannot reach the host (DNS/TLS/Cloudflare) | check the device network and the tunnel |
+
+Role capabilities enforced on both sides:
+
+| Action | manager | kitchen_lead | floor_staff |
+| --- | --- | --- | --- |
+| Create menu item | ✅ | ✅ | ❌ |
+| Rename / recategorise / photo | ✅ | ❌ | ❌ |
+| Price, stock, visibility | ✅ | ✅ | ✅ |
+
+The UI hides "+ ADD ITEM" and disables name/category/description/photo for roles that
+PocketBase would reject, so those mutations are never queued.
+
 ## Design system
 
 - Background `#121212`, cards `#262626`, header/sheets `#1E1E1E`, hairline `#333333`

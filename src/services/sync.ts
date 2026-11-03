@@ -1,7 +1,13 @@
 import { pb, isPocketBaseConfigured } from './pocketbase';
 import { COLLECTIONS } from './collections';
 import { assertBranchScope, scopeWritePayload } from './branchScope';
-import { isDuplicateRecordError, isNotFoundError } from './errors';
+import {
+  DescribedPocketBaseError,
+  describePocketBaseError,
+  describeSyncHint,
+  isDuplicateRecordError,
+  isNotFoundError,
+} from './errors';
 import { buildMenuItemWritePayload } from './uploads';
 import {
   toBranchSettingsRecord,
@@ -19,13 +25,78 @@ import {
   TerminalSettings,
 } from '../types';
 
+export interface SyncFailure {
+  entryId: string;
+  actionType: OutboxActionType;
+  label: string;
+  error: DescribedPocketBaseError;
+}
+
 export interface FlushResult {
   syncedIds: string[];
   failedIds: string[];
   syncedTypes: OutboxActionType[];
+  failures: SyncFailure[];
 }
 
 const DEMO_SYNC_DELAY_MS = 450;
+
+const ACTION_TARGETS: Record<
+  OutboxActionType,
+  { collection: string; idKey?: string; nestedKey?: string }
+> = {
+  UPDATE_ORDER_STATUS: { collection: COLLECTIONS.orders, idKey: 'orderId' },
+  CREATE_ORDER: { collection: COLLECTIONS.orders, nestedKey: 'order' },
+  TOGGLE_MENU_STOCK: { collection: COLLECTIONS.menuItems, idKey: 'itemId' },
+  UPDATE_MENU_PRICE: { collection: COLLECTIONS.menuItems, idKey: 'itemId' },
+  CREATE_MENU_ITEM: { collection: COLLECTIONS.menuItems, nestedKey: 'item' },
+  UPDATE_MENU_ITEM: { collection: COLLECTIONS.menuItems, nestedKey: 'item' },
+  SAVE_TABLE: { collection: COLLECTIONS.tables, nestedKey: 'table' },
+  UPDATE_RESERVATION_STATUS: {
+    collection: COLLECTIONS.reservations,
+    idKey: 'reservationId',
+  },
+  UPDATE_STORE_HOURS: { collection: COLLECTIONS.branchSettings },
+  UPDATE_SETTINGS: { collection: COLLECTIONS.branchSettings },
+};
+
+function entryTarget(entry: OutboxEntry): {
+  collection: string;
+  recordId: string;
+  branchId: string;
+  keys: string;
+} {
+  const target = ACTION_TARGETS[entry.actionType];
+  let recordId = target?.idKey ? String(entry.payload[target.idKey] ?? '') : '';
+  let branchId = '';
+  if (target?.nestedKey) {
+    const nested = entry.payload[target.nestedKey] as
+      | { id?: unknown; branchId?: unknown }
+      | undefined;
+    recordId = nested?.id ? String(nested.id) : recordId;
+    branchId = nested?.branchId ? String(nested.branchId) : branchId;
+  }
+  if (!branchId && entry.payload.branchId) {
+    branchId = String(entry.payload.branchId);
+  }
+  return {
+    collection: target?.collection ?? 'unknown',
+    recordId: recordId || '(new)',
+    branchId: branchId || '(from session)',
+    keys: Object.keys(entry.payload).join(','),
+  };
+}
+
+function logSyncAttempt(entry: OutboxEntry): void {
+  const target = entryTarget(entry);
+  console.log(
+    `[sync] ${entry.actionType} -> ${target.collection}/${target.recordId}` +
+      ` | branch=${target.branchId}` +
+      ` | auth.valid=${pb.authStore.isValid}` +
+      ` | payload=${target.keys}` +
+      (entry.retryCount > 0 ? ` | retry=${entry.retryCount}` : '')
+  );
+}
 
 function withRecordId(
   payload: Record<string, unknown> | FormData,
@@ -263,7 +334,7 @@ async function applyOutboxEntry(entry: OutboxEntry): Promise<void> {
  */
 export async function flushOutbox(entries: OutboxEntry[]): Promise<FlushResult> {
   if (entries.length === 0) {
-    return { syncedIds: [], failedIds: [], syncedTypes: [] };
+    return { syncedIds: [], failedIds: [], syncedTypes: [], failures: [] };
   }
 
   if (!isPocketBaseConfigured) {
@@ -272,23 +343,43 @@ export async function flushOutbox(entries: OutboxEntry[]): Promise<FlushResult> 
       syncedIds: entries.map((entry) => entry.id),
       failedIds: [],
       syncedTypes: entries.map((entry) => entry.actionType),
+      failures: [],
     };
   }
 
   const syncedIds: string[] = [];
   const failedIds: string[] = [];
   const syncedTypes: OutboxActionType[] = [];
+  const failures: SyncFailure[] = [];
 
   for (const entry of entries) {
     try {
+      logSyncAttempt(entry);
       await applyOutboxEntry(entry);
       syncedIds.push(entry.id);
       syncedTypes.push(entry.actionType);
+      console.log(`[sync] ok ${entry.actionType} (${entry.id})`);
     } catch (error) {
-      console.warn(`Outbox entry ${entry.id} failed to sync`, error);
+      const described = describePocketBaseError(error);
+      failures.push({
+        entryId: entry.id,
+        actionType: entry.actionType,
+        label: entry.label,
+        error: described,
+      });
+      // The full server rejection: kind, HTTP status, PocketBase message, the
+      // per-field validation detail, and the request URL that produced it.
+      console.warn(
+        `[sync] FAILED ${entry.actionType} "${entry.label}"` +
+          ` | kind=${described.kind} status=${described.status}` +
+          ` | message=${described.message}` +
+          (described.detail ? ` | detail=${described.detail}` : '') +
+          (described.url ? ` | url=${described.url}` : '') +
+          ` | hint=${describeSyncHint(described)}`
+      );
       failedIds.push(entry.id);
     }
   }
 
-  return { syncedIds, failedIds, syncedTypes };
+  return { syncedIds, failedIds, syncedTypes, failures };
 }

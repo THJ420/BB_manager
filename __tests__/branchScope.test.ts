@@ -13,6 +13,8 @@ import { pb } from '../src/services/pocketbase';
 import {
   BranchScopeError,
   assignedBranchId,
+  canCreateMenuItems,
+  canEditMenuDetails,
   branchScopeFilter,
   clearAssignedBranchId,
   rememberAssignedBranchId,
@@ -80,6 +82,15 @@ describe('branch scope enforcement', () => {
 
     authStore.record = null;
     expect(assignedBranchId()).toBe('branch_we_03');
+  });
+
+  it('mirrors the PocketBase menu permissions per role', () => {
+    expect(canCreateMenuItems('manager')).toBe(true);
+    expect(canCreateMenuItems('kitchen_lead')).toBe(true);
+    expect(canCreateMenuItems('floor_staff')).toBe(false);
+    expect(canEditMenuDetails('manager')).toBe(true);
+    expect(canEditMenuDetails('kitchen_lead')).toBe(false);
+    expect(canEditMenuDetails('floor_staff')).toBe(false);
   });
 
   it('builds realtime filters from the authenticated branch only', () => {

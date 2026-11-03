@@ -207,6 +207,30 @@ describe('sync outbox handlers', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it('reports the exact PocketBase rejection for a blocked mutation', async () => {
+    const ruleDenial = {
+      status: 400,
+      message: 'Failed to create record.',
+      url: 'https://pocket.example/api/collections/menu_items/records',
+      response: { message: 'Failed to create record.', data: {} },
+    };
+    const create = jest.fn(async () => {
+      throw ruleDenial;
+    });
+    useCollection('menu_items', { create });
+    const item = createSeedMenu(1)[0] as MenuItem;
+
+    const result = await flushOutbox([
+      entry('CREATE_MENU_ITEM', { item, imageRemoved: false }),
+    ]);
+
+    expect(result.failedIds).toEqual(['act_1_CREATE_MENU_ITEM']);
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0].actionType).toBe('CREATE_MENU_ITEM');
+    expect(result.failures[0].error.kind).toBe('rule');
+    expect(result.failures[0].error.url).toContain('menu_items');
+  });
+
   it('stamps the authenticated branch onto a menu stock toggle', async () => {
     const update = jest.fn(async () => undefined);
     useCollection('menu_items', { update });

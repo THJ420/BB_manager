@@ -1,5 +1,6 @@
 import { COLLECTIONS } from './collections';
 import { pb } from './pocketbase';
+import { StaffRole } from '../types';
 
 /** Thrown when a mutation targets a branch other than the signed-in staff account's. */
 export class BranchScopeError extends Error {
@@ -92,4 +93,26 @@ export function scopeWritePayload(
   }
 
   return { ...data, branch_id: branchId };
+}
+
+/** Role recorded on the PocketBase staff record ('' when unavailable). */
+export function assignedRole(): StaffRole | '' {
+  const record = pb.authStore.record as Record<string, unknown> | null;
+  const role = record?.role;
+  return role === 'manager' || role === 'kitchen_lead' || role === 'floor_staff'
+    ? role
+    : '';
+}
+
+/**
+ * Mirrors `menu_items.createRule` in PocketBase. Queueing a create from any
+ * other role produces a permanent HTTP 400 that can never drain.
+ */
+export function canCreateMenuItems(role: string): boolean {
+  return role === 'manager' || role === 'kitchen_lead';
+}
+
+/** Mirrors `pb_hooks/guards.pb.js`: only managers may rename/recategorise items. */
+export function canEditMenuDetails(role: string): boolean {
+  return role === 'manager';
 }

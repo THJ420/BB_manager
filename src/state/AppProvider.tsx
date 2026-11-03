@@ -30,10 +30,11 @@ import {
   restoreSession,
   setActiveBranchId,
 } from '../services/auth';
-import { isPocketBaseConfigured } from '../services/pocketbase';
-import { assignedBranchId } from '../services/branchScope';
+import { isPocketBaseConfigured, pocketBaseDiagnostics, PocketBaseDiagnostics } from '../services/pocketbase';
+import { assignedBranchId, canCreateMenuItems } from '../services/branchScope';
 import { startRealtime } from '../services/realtime';
-import { flushOutbox } from '../services/sync';
+import { flushOutbox, SyncFailure } from '../services/sync';
+import { describeSyncHint } from '../services/errors';
 import { fetchBranchSnapshot, BranchSnapshot } from '../services/data';
 import {
   Branch,
@@ -52,6 +53,22 @@ import {
 export interface LoginResult {
   ok: boolean;
   error?: string;
+}
+
+export interface SyncDiagnosticsReport {
+  generatedAt: string;
+  pocketbase: PocketBaseDiagnostics;
+  queue: { pending: number; actions: string[] };
+  result: { synced: number; failed: number };
+  failures: Array<{
+    actionType: string;
+    label: string;
+    kind: string;
+    status: number;
+    message: string;
+    detail: string;
+    hint: string;
+  }>;
 }
 
 interface AppContextValue {
@@ -75,6 +92,7 @@ interface AppContextValue {
   toggleAcceptingReservations: (accepting: boolean) => Promise<void>;
   saveTerminalSettings: (settings: TerminalSettings) => Promise<void>;
   syncOutboxNow: () => Promise<void>;
+  runSyncDiagnostics: () => Promise<SyncDiagnosticsReport>;
   setConnectionStatus: (status: ConnectionStatus) => void;
   setBranch: (branch: Branch) => Promise<void>;
 }
@@ -118,6 +136,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const remoteRequestIdRef = useRef(0);
   const remoteLoadedBranchRef = useRef<string | null>(null);
   const syncInFlightRef = useRef(false);
+  const lastSyncFailuresRef = useRef<SyncFailure[]>([]);
+  const lastFlushRef = useRef({ synced: 0, failed: 0 });
 
   useEffect(() => {
     stateRef.current = state;
@@ -534,6 +554,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const saveMenuItem = useCallback(
     async (item: MenuItem): Promise<void> => {
       const existing = stateRef.current.menuItems.find((entry) => entry.id === item.id);
+      const role = stateRef.current.session?.role ?? '';
+      if (!existing && !canCreateMenuItems(role)) {
+        // menu_items.createRule requires manager/kitchen_lead; queueing this
+        // would fail forever and block the outbox badge.
+        console.error(
+          `[menu] role "${role || 'unknown'}" cannot create menu items — action not queued.`
+        );
+        return;
+      }
       // Removing the last photo must clear PocketBase's `image` file field, not
       // just switch the optimistic card back to its placeholder.
       const imageRemoved = Boolean(existing?.imageUrl) && !item.imageUrl;
@@ -671,6 +700,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // causal order so a create always lands before its dependent update.
       const result = await flushOutbox(sortOutboxChronologically(entries));
 
+      lastSyncFailuresRef.current = result.failures;
+      lastFlushRef.current = {
+        synced: result.syncedIds.length,
+        failed: result.failedIds.length,
+      };
+      console.log(
+        `[sync] flush: ${result.syncedIds.length} synced, ` +
+          `${result.failedIds.length} failed of ${entries.length} attempted`
+      );
+
       if (result.syncedIds.length > 0) {
         dispatch({
           type: 'SYNC_OUTBOX',
@@ -693,14 +732,73 @@ export function AppProvider({ children }: { children: ReactNode }) {
         );
       }
 
+      // A rejection from PocketBase means the network is up but the queue is
+      // blocked by rules/auth — show POLLING, not OFFLINE QUEUED.
+      const transportFailure = result.failures.some(
+        (failure) =>
+          failure.error.kind === 'network' || failure.error.kind === 'aborted'
+      );
       dispatch({
         type: 'SET_CONNECTION',
-        status: result.failedIds.length > 0 ? 'offline' : 'live',
+        status: transportFailure
+          ? 'offline'
+          : result.failedIds.length > 0
+            ? 'polling'
+            : 'live',
       });
     } finally {
       syncInFlightRef.current = false;
     }
   }, []);
+
+  /**
+   * Force-flushes the queue and prints the exact PocketBase rejection for every
+   * entry: URL, auth state, role, branch, HTTP status, server message and the
+   * per-field validation detail. Returned so the UI can show the same report.
+   */
+  const runSyncDiagnostics = useCallback(async (): Promise<SyncDiagnosticsReport> => {
+    const pendingEntries = stateRef.current.outbox.filter((entry) => !entry.synced);
+    const pocketbase = pocketBaseDiagnostics();
+
+    console.log('[diag] PocketBase:', JSON.stringify(pocketbase));
+    console.log(
+      '[diag] queue:',
+      pendingEntries.length === 0
+        ? '(empty)'
+        : pendingEntries
+            .map((entry) => `${entry.actionType} retries=${entry.retryCount} "${entry.label}"`)
+            .join(' | ')
+    );
+
+    if (pendingEntries.length > 0 && !syncInFlightRef.current) {
+      await syncOutboxNow();
+    }
+
+    const report: SyncDiagnosticsReport = {
+      generatedAt: new Date().toISOString(),
+      pocketbase,
+      queue: {
+        pending: pendingEntries.length,
+        actions: pendingEntries.map((entry) => `${entry.actionType}: ${entry.label}`),
+      },
+      result: lastFlushRef.current,
+      failures:
+        pendingEntries.length === 0
+          ? []
+          : lastSyncFailuresRef.current.map((failure) => ({
+              actionType: failure.actionType,
+              label: failure.label,
+              kind: failure.error.kind,
+              status: failure.error.status,
+              message: failure.error.message,
+              detail: failure.error.detail,
+              hint: describeSyncHint(failure.error),
+            })),
+    };
+
+    console.log('[diag] report:', JSON.stringify(report, null, 2));
+    return report;
+  }, [syncOutboxNow]);
 
   // Once hydrated, every queued mutation attempts an immediate live sync.
   useEffect(() => {
@@ -794,6 +892,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleAcceptingReservations,
       saveTerminalSettings,
       syncOutboxNow,
+      runSyncDiagnostics,
       setConnectionStatus,
       setBranch,
     }),
@@ -814,6 +913,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleAcceptingReservations,
       saveTerminalSettings,
       syncOutboxNow,
+      runSyncDiagnostics,
       setConnectionStatus,
       setBranch,
     ]

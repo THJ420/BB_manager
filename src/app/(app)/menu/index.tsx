@@ -9,11 +9,15 @@ import { ScreenHeader } from '../../../components/ScreenHeader';
 import { TextField } from '../../../components/TextField';
 import { filterMenu, menuCategoryOptions } from '../../../lib/domain';
 import { useApp } from '../../../state/AppProvider';
+import { canCreateMenuItems, canEditMenuDetails } from '../../../services/branchScope';
 import { Colors, Spacing } from '../../../theme/colors';
 import { MenuItem } from '../../../types';
 
 export default function MenuStockScreen() {
   const { state, setMenuItemStock, saveMenuItem } = useApp();
+  const role = state.session?.role ?? '';
+  const canCreate = canCreateMenuItems(role);
+  const canEditDetails = canEditMenuDetails(role);
 
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -46,13 +50,15 @@ export default function MenuStockScreen() {
         title="Menu & Stock"
         subtitle={`${state.activeBranch.name} • ${inStockCount} / ${state.menuItems.length} IN STOCK`}
         right={
-          <ActionButton
-            label="+ ADD ITEM"
-            variant="primary"
-            compact
-            onPress={openCreate}
-            testID="btn_add_menu_item"
-          />
+          canCreate ? (
+            <ActionButton
+              label="+ ADD ITEM"
+              variant="primary"
+              compact
+              onPress={openCreate}
+              testID="btn_add_menu_item"
+            />
+          ) : undefined
         }
       />
 
@@ -91,7 +97,9 @@ export default function MenuStockScreen() {
             <Text style={styles.emptyEmoji}>🍔</Text>
             <Text style={styles.emptyTitle}>No menu items found</Text>
             <Text style={styles.emptySub}>
-              Adjust the category filter, clear the search, or add a new dish.
+              {canCreate
+                ? 'Adjust the category filter, clear the search, or add a new dish.'
+                : 'Adjust the category filter or clear the search. Your role cannot add menu items.'}
             </Text>
           </View>
         }
@@ -101,6 +109,7 @@ export default function MenuStockScreen() {
         visible={editorVisible}
         item={editingItem}
         branchId={state.activeBranch.id}
+        canEditDetails={canEditDetails}
         onClose={() => {
           setEditorVisible(false);
           setEditingItem(null);

@@ -17,6 +17,8 @@ export interface MenuItemEditorModalProps {
   branchId: string;
   onClose: () => void;
   onSave: (item: MenuItem) => void;
+  /** Managers only; other roles are rejected by the PocketBase menu guard. */
+  canEditDetails?: boolean;
 }
 
 type PhotoSource = 'camera' | 'library';
@@ -27,6 +29,7 @@ export function MenuItemEditorModal({
   branchId,
   onClose,
   onSave,
+  canEditDetails = true,
 }: MenuItemEditorModalProps) {
   const [name, setName] = useState('');
   const [category, setCategory] = useState('Burgers');
@@ -152,6 +155,7 @@ export function MenuItemEditorModal({
     >
       <TextField
         label="Item Name *"
+        editable={canEditDetails}
         value={name}
         onChangeText={(value) => {
           setName(value);
@@ -190,8 +194,16 @@ export function MenuItemEditorModal({
         </View>
       </View>
 
+      {!canEditDetails ? (
+        <Text style={styles.permissionHint}>
+          Only managers can rename, recategorise or re-photograph an item. Price and stock
+          stay editable.
+        </Text>
+      ) : null}
+
       <TextField
         label="Ingredients / Short Description"
+        editable={canEditDetails}
         value={description}
         onChangeText={setDescription}
         placeholder="Ingredients, allergen notes or preparation details"
@@ -200,6 +212,7 @@ export function MenuItemEditorModal({
         testID="input_item_desc"
       />
 
+      {canEditDetails ? (
       <View style={styles.photoCard}>
         <View style={styles.photoHeader}>
           <Text style={styles.fieldLabel}>Item Photo & 1:1 Crop</Text>
@@ -269,6 +282,7 @@ export function MenuItemEditorModal({
           </View>
         )}
       </View>
+      ) : null}
 
       <TextField
         label={`Price (${item?.currency ?? 'USD'}) *`}
@@ -313,6 +327,11 @@ export function MenuItemEditorModal({
 }
 
 const styles = StyleSheet.create({
+  permissionHint: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: Colors.textSecondary,
+  },
   fieldGroup: {
     gap: 6,
   },

@@ -16,6 +16,7 @@ import { getAlertTone } from '../../lib/alertTones';
 import { storeHoursSummary } from '../../lib/domain';
 import { initials, roleLabel } from '../../lib/format';
 import { useApp } from '../../state/AppProvider';
+import type { SyncDiagnosticsReport } from '../../state/AppProvider';
 import { Colors, Radius, Spacing } from '../../theme/colors';
 import {
   AlertToneId,
@@ -53,6 +54,7 @@ export default function TerminalSettingsScreen() {
     updateWeeklySchedule,
     saveTerminalSettings,
     syncOutboxNow,
+    runSyncDiagnostics,
     setConnectionStatus,
     setBranch,
   } = useApp();
@@ -63,6 +65,8 @@ export default function TerminalSettingsScreen() {
   const [savedVisible, setSavedVisible] = useState(false);
   const [logoutVisible, setLogoutVisible] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [diagnostics, setDiagnostics] = useState<SyncDiagnosticsReport | null>(null);
+  const [diagnosticsVisible, setDiagnosticsVisible] = useState(false);
 
   const [recipientInput, setRecipientInput] = useState('');
   const [newStaffName, setNewStaffName] = useState('');
@@ -178,6 +182,17 @@ export default function TerminalSettingsScreen() {
     setIsSyncing(true);
     try {
       await syncOutboxNow();
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleDiagnostics = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    try {
+      setDiagnostics(await runSyncDiagnostics());
+      setDiagnosticsVisible(true);
     } finally {
       setIsSyncing(false);
     }
@@ -344,6 +359,20 @@ export default function TerminalSettingsScreen() {
               testID="btn_sync_outbox"
             />
           </View>
+
+          <ActionButton
+            label="RUN SYNC DIAGNOSTICS"
+            variant="outline"
+            compact
+            disabled={isSyncing}
+            onPress={() => void handleDiagnostics()}
+            testID="btn_sync_diagnostics"
+            style={styles.diagnosticsButton}
+          />
+          <Text style={styles.rowSubtitle}>
+            Force-flushes the queue and prints the endpoint, auth state, role, branch and
+            the exact PocketBase rejection to the console.
+          </Text>
 
           <View style={styles.divider} />
 
@@ -767,6 +796,52 @@ export default function TerminalSettingsScreen() {
       />
 
       <DialogModal
+        visible={diagnosticsVisible}
+        title="Sync Diagnostics"
+        message="Exact PocketBase response for the queued actions"
+        onRequestClose={() => setDiagnosticsVisible(false)}
+        actions={[{ label: 'Close', onPress: () => setDiagnosticsVisible(false) }]}
+      >
+        {diagnostics ? (
+          <View style={styles.diagnosticsBody}>
+            <Text style={styles.diagLine}>Endpoint: {diagnostics.pocketbase.url}</Text>
+            <Text style={styles.diagLine}>
+              Auth: {diagnostics.pocketbase.authValid ? 'valid' : 'EXPIRED'}
+              {diagnostics.pocketbase.tokenExpiresAt
+                ? ` (expires ${diagnostics.pocketbase.tokenExpiresAt})`
+                : ''}
+            </Text>
+            <Text style={styles.diagLine}>
+              Staff: {diagnostics.pocketbase.email || '(none)'} • role{' '}
+              {diagnostics.pocketbase.role || '(none)'}
+            </Text>
+            <Text style={styles.diagLine}>
+              Branch: {diagnostics.pocketbase.branchId || '(none)'}
+            </Text>
+            <Text style={styles.diagLine}>
+              Queue: {diagnostics.queue.pending} pending • {diagnostics.result.synced} synced /{' '}
+              {diagnostics.result.failed} rejected
+            </Text>
+            {diagnostics.failures.length === 0 ? (
+              <Text style={styles.diagLine}>
+                No rejection recorded. The full report is printed to the console.
+              </Text>
+            ) : (
+              diagnostics.failures.slice(0, 4).map((failure) => (
+                <Text
+                  key={`${failure.actionType}-${failure.label}`}
+                  style={styles.diagError}
+                >
+                  {failure.actionType}: {failure.kind} {failure.status} — {failure.hint}
+                  {failure.detail ? ` (${failure.detail})` : ''}
+                </Text>
+              ))
+            )}
+          </View>
+        ) : null}
+      </DialogModal>
+
+      <DialogModal
         visible={logoutVisible}
         title="Sign Out"
         message="Are you sure you want to end your kitchen session?"
@@ -788,6 +863,24 @@ export default function TerminalSettingsScreen() {
 }
 
 const styles = StyleSheet.create({
+  diagnosticsButton: {
+    alignSelf: 'flex-start',
+    marginTop: Spacing.sm,
+  },
+  diagnosticsBody: {
+    gap: 6,
+  },
+  diagLine: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: Colors.textSecondary,
+  },
+  diagError: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: Colors.error,
+    fontWeight: '700',
+  },
   safe: {
     flex: 1,
     backgroundColor: Colors.background,
