@@ -37,7 +37,19 @@ export interface FlushResult {
   failedIds: string[];
   syncedTypes: OutboxActionType[];
   failures: SyncFailure[];
+  /** Permanently rejected entries that were removed from the queue. */
+  discarded: SyncFailure[];
 }
+
+/**
+ * A retry can never fix these: the target record is gone (404) or PocketBase
+ * rejected the payload shape (400 validation). Keeping them queued is what
+ * previously jammed every later mutation.
+ */
+const PERMANENT_ERROR_KINDS: ReadonlySet<DescribedPocketBaseError['kind']> = new Set([
+  'not-found',
+  'validation',
+]);
 
 const DEMO_SYNC_DELAY_MS = 450;
 
@@ -334,7 +346,13 @@ async function applyOutboxEntry(entry: OutboxEntry): Promise<void> {
  */
 export async function flushOutbox(entries: OutboxEntry[]): Promise<FlushResult> {
   if (entries.length === 0) {
-    return { syncedIds: [], failedIds: [], syncedTypes: [], failures: [] };
+    return {
+      syncedIds: [],
+      failedIds: [],
+      syncedTypes: [],
+      failures: [],
+      discarded: [],
+    };
   }
 
   if (!isPocketBaseConfigured) {
@@ -344,6 +362,7 @@ export async function flushOutbox(entries: OutboxEntry[]): Promise<FlushResult> 
       failedIds: [],
       syncedTypes: entries.map((entry) => entry.actionType),
       failures: [],
+      discarded: [],
     };
   }
 
@@ -351,6 +370,7 @@ export async function flushOutbox(entries: OutboxEntry[]): Promise<FlushResult> 
   const failedIds: string[] = [];
   const syncedTypes: OutboxActionType[] = [];
   const failures: SyncFailure[] = [];
+  const discarded: SyncFailure[] = [];
 
   for (const entry of entries) {
     try {
@@ -361,12 +381,28 @@ export async function flushOutbox(entries: OutboxEntry[]): Promise<FlushResult> 
       console.log(`[sync] ok ${entry.actionType} (${entry.id})`);
     } catch (error) {
       const described = describePocketBaseError(error);
-      failures.push({
+      const failure: SyncFailure = {
         entryId: entry.id,
         actionType: entry.actionType,
         label: entry.label,
         error: described,
-      });
+      };
+
+      if (PERMANENT_ERROR_KINDS.has(described.kind)) {
+        // Dead-letter: drop this mutation only, keep the rest of the queue live.
+        discarded.push(failure);
+        console.warn(
+          `[sync] DISCARDED ${entry.actionType} "${entry.label}"` +
+            ` | kind=${described.kind} status=${described.status}` +
+            ` | message=${described.message}` +
+            (described.detail ? ` | detail=${described.detail}` : '') +
+            (described.url ? ` | url=${described.url}` : '') +
+            ` | removed from queue (permanent)`
+        );
+        continue;
+      }
+
+      failures.push(failure);
       // The full server rejection: kind, HTTP status, PocketBase message, the
       // per-field validation detail, and the request URL that produced it.
       console.warn(
@@ -381,5 +417,5 @@ export async function flushOutbox(entries: OutboxEntry[]): Promise<FlushResult> 
     }
   }
 
-  return { syncedIds, failedIds, syncedTypes, failures };
+  return { syncedIds, failedIds, syncedTypes, failures, discarded };
 }

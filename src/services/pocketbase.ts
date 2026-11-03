@@ -88,6 +88,29 @@ export function setPocketBaseUrl(url: string): void {
   }
 }
 
+/**
+ * Lightweight reachability check used to leave OFFLINE mode. Uses a plain fetch
+ * so it does not depend on the auth store or SDK retries.
+ */
+export async function isPocketBaseReachable(timeoutMs = 6_000): Promise<boolean> {
+  if (!isPocketBaseConfigured) return true;
+  const controller =
+    typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  try {
+    const response = await fetch(`${pb.baseUrl}/api/health`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: controller?.signal,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export interface PocketBaseDiagnostics {
   url: string;
   configured: boolean;

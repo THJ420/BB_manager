@@ -221,6 +221,24 @@ outbox sends — and prints the server's rejection verbatim.
 | `kind=validation` with field detail | payload/ID constraint (IDs must be 15 lowercase alphanumerics) | fix the field named in `detail` |
 | `OFFLINE QUEUED` with `status=0` | device cannot reach the host (DNS/TLS/Cloudflare) | check the device network and the tunnel |
 
+### Jammed queue (dead records, 404s)
+
+A permanently rejected mutation is now dead-lettered instead of retried forever:
+
+- **Dropped automatically**: `404 Not Found` (the record was deleted on PocketBase) and
+  `400` field-validation errors. The entry is removed from SQLite and state, logged as
+  `[sync] DISCARDED … | removed from queue (permanent)`, and listed in
+  Settings → RUN SYNC DIAGNOSTICS under "Dropped N permanently rejected action(s)".
+- **Still retried**: network/timeout, `401`/`403` (re-login fixes them) and `400` rule
+  denials (role/branch — the UI now prevents those writes).
+- **Manual escape hatch**: Settings → **CLEAR STUCK QUEUE** (confirmation required) wipes
+  every pending mutation, sets the connection back to live and re-subscribes SSE.
+
+Offline recovery: while the connection is `OFFLINE`, the 30 s retry tick first calls
+`GET /api/health` (6 s timeout). A success flips the badge to `SSE LIVE`, rebuilds the
+realtime subscriptions that failed while the host was down, and immediately resumes the
+queue; a successful flush also flips `OFFLINE → LIVE` on its own.
+
 Role capabilities enforced on both sides:
 
 | Action | manager | kitchen_lead | floor_staff |

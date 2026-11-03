@@ -54,6 +54,7 @@ export default function TerminalSettingsScreen() {
     updateWeeklySchedule,
     saveTerminalSettings,
     syncOutboxNow,
+    clearOutbox,
     runSyncDiagnostics,
     setConnectionStatus,
     setBranch,
@@ -67,6 +68,7 @@ export default function TerminalSettingsScreen() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [diagnostics, setDiagnostics] = useState<SyncDiagnosticsReport | null>(null);
   const [diagnosticsVisible, setDiagnosticsVisible] = useState(false);
+  const [clearQueueVisible, setClearQueueVisible] = useState(false);
 
   const [recipientInput, setRecipientInput] = useState('');
   const [newStaffName, setNewStaffName] = useState('');
@@ -185,6 +187,11 @@ export default function TerminalSettingsScreen() {
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  const handleClearQueue = async () => {
+    setClearQueueVisible(false);
+    await clearOutbox();
   };
 
   const handleDiagnostics = async () => {
@@ -372,6 +379,19 @@ export default function TerminalSettingsScreen() {
           <Text style={styles.rowSubtitle}>
             Force-flushes the queue and prints the endpoint, auth state, role, branch and
             the exact PocketBase rejection to the console.
+          </Text>
+
+          <ActionButton
+            label="CLEAR STUCK QUEUE"
+            variant="danger"
+            compact
+            onPress={() => setClearQueueVisible(true)}
+            testID="btn_clear_outbox"
+            style={styles.diagnosticsButton}
+          />
+          <Text style={styles.rowSubtitle}>
+            Deletes every pending local mutation and reconnects immediately. Use it when
+            a deleted record keeps the queue jammed.
           </Text>
 
           <View style={styles.divider} />
@@ -796,6 +816,21 @@ export default function TerminalSettingsScreen() {
       />
 
       <DialogModal
+        visible={clearQueueVisible}
+        title="Clear Stuck Queue"
+        message={`Discard ${pendingCount} pending mutation(s)? They will not be sent again.`}
+        onRequestClose={() => setClearQueueVisible(false)}
+        actions={[
+          { label: 'Cancel', variant: 'outline', onPress: () => setClearQueueVisible(false) },
+          {
+            label: 'Clear Queue',
+            variant: 'danger',
+            onPress: () => void handleClearQueue(),
+          },
+        ]}
+      />
+
+      <DialogModal
         visible={diagnosticsVisible}
         title="Sync Diagnostics"
         message="Exact PocketBase response for the queued actions"
@@ -829,6 +864,15 @@ export default function TerminalSettingsScreen() {
               Queue: {diagnostics.queue.pending} pending • {diagnostics.result.synced} synced /{' '}
               {diagnostics.result.failed} rejected
             </Text>
+            {diagnostics.discarded.length > 0 ? (
+              <Text style={styles.diagError}>
+                Dropped {diagnostics.discarded.length} permanently rejected action(s):{' '}
+                {diagnostics.discarded
+                  .slice(0, 3)
+                  .map((entry) => `${entry.actionType} (${entry.kind} ${entry.status})`)
+                  .join(', ')}
+              </Text>
+            ) : null}
             {diagnostics.failures.length === 0 ? (
               <Text style={styles.diagLine}>
                 No rejection recorded. The full report is printed to the console.

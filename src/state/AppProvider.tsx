@@ -6,6 +6,7 @@ import React, {
   useMemo,
   useReducer,
   useRef,
+  useState,
   ReactNode,
 } from 'react';
 import { BRANCHES } from '../constants/branches';
@@ -30,7 +31,12 @@ import {
   restoreSession,
   setActiveBranchId,
 } from '../services/auth';
-import { isPocketBaseConfigured, pocketBaseDiagnostics, PocketBaseDiagnostics } from '../services/pocketbase';
+import {
+  isPocketBaseConfigured,
+  isPocketBaseReachable,
+  pocketBaseDiagnostics,
+  PocketBaseDiagnostics,
+} from '../services/pocketbase';
 import { assignedBranchId, canCreateMenuItems } from '../services/branchScope';
 import { startRealtime } from '../services/realtime';
 import { flushOutbox, SyncFailure } from '../services/sync';
@@ -71,6 +77,13 @@ export interface SyncDiagnosticsReport {
     detail: string;
     hint: string;
   }>;
+  discarded: Array<{
+    actionType: string;
+    label: string;
+    kind: string;
+    status: number;
+    message: string;
+  }>;
 }
 
 interface AppContextValue {
@@ -94,6 +107,7 @@ interface AppContextValue {
   toggleAcceptingReservations: (accepting: boolean) => Promise<void>;
   saveTerminalSettings: (settings: TerminalSettings) => Promise<void>;
   syncOutboxNow: () => Promise<void>;
+  clearOutbox: () => Promise<void>;
   runSyncDiagnostics: () => Promise<SyncDiagnosticsReport>;
   setConnectionStatus: (status: ConnectionStatus) => void;
   setBranch: (branch: Branch) => Promise<void>;
@@ -139,7 +153,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const remoteLoadedBranchRef = useRef<string | null>(null);
   const syncInFlightRef = useRef(false);
   const lastSyncFailuresRef = useRef<SyncFailure[]>([]);
+  const lastDiscardedRef = useRef<SyncFailure[]>([]);
   const lastFlushRef = useRef({ synced: 0, failed: 0 });
+  const [realtimeEpoch, setRealtimeEpoch] = useState(0);
 
   useEffect(() => {
     stateRef.current = state;
@@ -450,7 +466,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       disposed = true;
       cleanup?.();
     };
-  }, [state.hydrated, state.session?.branchId, playIncomingAlert]);
+  }, [state.hydrated, state.session?.branchId, playIncomingAlert, realtimeEpoch]);
 
   const enqueue = useCallback(
     async (
@@ -703,6 +719,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const result = await flushOutbox(sortOutboxChronologically(entries));
 
       lastSyncFailuresRef.current = result.failures;
+      lastDiscardedRef.current = result.discarded;
       lastFlushRef.current = {
         synced: result.syncedIds.length,
         failed: result.failedIds.length,
@@ -734,23 +751,84 @@ export function AppProvider({ children }: { children: ReactNode }) {
         );
       }
 
+      if (result.discarded.length > 0) {
+        // Dead-letter: a 404/validation mutation can never succeed, so remove it
+        // instead of letting it jam every later mutation forever.
+        const discardedIds = result.discarded.map((failure) => failure.entryId);
+        dispatch({ type: 'DISCARD_OUTBOX', ids: discardedIds });
+        try {
+          await db.deleteOutboxEntries(discardedIds);
+        } catch (error) {
+          console.warn('Unable to remove discarded outbox actions', error);
+        }
+        console.warn(
+          `[sync] removed ${discardedIds.length} permanently rejected action(s) from the queue`
+        );
+      }
+
       // A rejection from PocketBase means the network is up but the queue is
       // blocked by rules/auth — show POLLING, not OFFLINE QUEUED.
       const transportFailure = result.failures.some(
         (failure) =>
           failure.error.kind === 'network' || failure.error.kind === 'aborted'
       );
-      dispatch({
-        type: 'SET_CONNECTION',
-        status: transportFailure
-          ? 'offline'
-          : result.failedIds.length > 0
-            ? 'polling'
-            : 'live',
-      });
+      const wasOffline = stateRef.current.connection === 'offline';
+      const nextStatus = transportFailure
+        ? 'offline'
+        : result.failedIds.length > 0
+          ? 'polling'
+          : 'live';
+
+      dispatch({ type: 'SET_CONNECTION', status: nextStatus });
+
+      // Rebuild the SSE subscriptions that failed while the host was unreachable.
+      if (wasOffline && nextStatus === 'live') {
+        setRealtimeEpoch((epoch) => epoch + 1);
+      }
     } finally {
       syncInFlightRef.current = false;
     }
+  }, []);
+
+  /**
+   * Flips the terminal out of OFFLINE as soon as the host answers /api/health,
+   * re-subscribes realtime, and lets the caller resume the outbox.
+   */
+  const probeConnection = useCallback(async (): Promise<boolean> => {
+    if (!isPocketBaseConfigured) {
+      dispatch({ type: 'SET_CONNECTION', status: 'live' });
+      return true;
+    }
+    const reachable = await isPocketBaseReachable();
+    if (!reachable) {
+      dispatch({ type: 'SET_CONNECTION', status: 'offline' });
+      return false;
+    }
+    const wasOffline = stateRef.current.connection === 'offline';
+    dispatch({ type: 'SET_CONNECTION', status: 'live' });
+    if (wasOffline) {
+      setRealtimeEpoch((epoch) => epoch + 1);
+    }
+    return true;
+  }, []);
+
+  /** Manual reset: wipe every pending mutation and reconnect immediately. */
+  const clearOutbox = useCallback(async (): Promise<void> => {
+    const removed = stateRef.current.outbox.length;
+    dispatch({ type: 'CLEAR_OUTBOX' });
+    lastSyncFailuresRef.current = [];
+    lastDiscardedRef.current = [];
+    lastFlushRef.current = { synced: 0, failed: 0 };
+    try {
+      await db.clearOutbox();
+    } catch (error) {
+      console.warn('Unable to clear the local outbox', error);
+    }
+    dispatch({ type: 'SET_CONNECTION', status: 'live' });
+    setRealtimeEpoch((epoch) => epoch + 1);
+    console.warn(
+      `[sync] outbox reset manually — ${removed} pending action(s) discarded`
+    );
   }, []);
 
   /**
@@ -798,6 +876,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
               detail: failure.error.detail,
               hint: describeSyncHint(failure.error),
             })),
+      discarded: lastDiscardedRef.current.map((failure) => ({
+        actionType: failure.actionType,
+        label: failure.label,
+        kind: failure.error.kind,
+        status: failure.error.status,
+        message: failure.error.message,
+      })),
     };
 
     console.log('[diag] report:', JSON.stringify(report, null, 2));
@@ -822,10 +907,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isPocketBaseConfigured || !state.hydrated || !state.session) return;
     const timer = setInterval(() => {
+      if (stateRef.current.connection === 'offline') {
+        // Confirm the host is back before hammering the failing mutations.
+        void probeConnection().then((reachable) => {
+          if (reachable) void syncOutboxNow();
+        });
+        return;
+      }
       void syncOutboxNow();
     }, OUTBOX_RETRY_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [state.hydrated, state.session, syncOutboxNow]);
+  }, [state.hydrated, state.session, syncOutboxNow, probeConnection]);
 
   const setConnectionStatus = useCallback((status: ConnectionStatus): void => {
     dispatch({ type: 'SET_CONNECTION', status });
@@ -896,6 +988,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleAcceptingReservations,
       saveTerminalSettings,
       syncOutboxNow,
+      clearOutbox,
       runSyncDiagnostics,
       setConnectionStatus,
       setBranch,
@@ -917,6 +1010,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleAcceptingReservations,
       saveTerminalSettings,
       syncOutboxNow,
+      clearOutbox,
       runSyncDiagnostics,
       setConnectionStatus,
       setBranch,

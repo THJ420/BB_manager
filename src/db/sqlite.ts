@@ -153,6 +153,21 @@ export async function incrementOutboxRetry(id: string): Promise<void> {
   );
 }
 
+export async function deleteOutboxEntries(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const db = await getDatabase();
+  const placeholders = ids.map(() => '?').join(', ');
+  await db.runAsync(
+    `DELETE FROM outbox_queue WHERE id IN (${placeholders})`,
+    ...ids
+  );
+}
+
+export async function clearOutbox(): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync(`DELETE FROM outbox_queue`);
+}
+
 export async function pruneSyncedOutbox(): Promise<void> {
   const db = await getDatabase();
   await db.runAsync(`DELETE FROM outbox_queue WHERE synced = 1`);

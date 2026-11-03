@@ -78,7 +78,9 @@ export type AppAction =
   | { type: 'PATCH_STORE_CONFIG'; patch: Partial<StoreOperationsConfig> }
   | { type: 'SET_SETTINGS'; settings: TerminalSettings }
   | { type: 'ADD_OUTBOX'; entry: OutboxEntry }
-  | { type: 'SYNC_OUTBOX'; ids: string[]; syncedAt: number };
+  | { type: 'SYNC_OUTBOX'; ids: string[]; syncedAt: number }
+  | { type: 'DISCARD_OUTBOX'; ids: string[] }
+  | { type: 'CLEAR_OUTBOX' };
 
 export const initialAppState: AppState = {
   hydrated: false,
@@ -285,6 +287,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const remaining = state.outbox.filter((entry) => !action.ids.includes(entry.id));
       return { ...state, outbox: remaining, lastSyncedAt: action.syncedAt };
     }
+
+    case 'DISCARD_OUTBOX':
+      return {
+        ...state,
+        outbox: state.outbox.filter((entry) => !action.ids.includes(entry.id)),
+      };
+
+    case 'CLEAR_OUTBOX':
+      return { ...state, outbox: [] };
 
     default:
       return state;

@@ -231,6 +231,70 @@ describe('sync outbox handlers', () => {
     expect(result.failures[0].error.url).toContain('menu_items');
   });
 
+  it('drops a mutation whose record no longer exists (404) instead of retrying forever', async () => {
+    const update = jest.fn(async () => {
+      throw {
+        status: 404,
+        message: "The requested resource wasn't found.",
+        response: { message: "The requested resource wasn't found.", data: {} },
+        url: 'https://pocket.example/api/collections/orders/records/ord_102',
+      };
+    });
+    useCollection('menu_items', { update });
+
+    const result = await flushOutbox([
+      entry('UPDATE_MENU_PRICE', { itemId: 'ord_102', price: 10 }),
+    ]);
+
+    expect(result.discarded).toHaveLength(1);
+    expect(result.discarded[0].entryId).toBe('act_1_UPDATE_MENU_PRICE');
+    expect(result.discarded[0].error.kind).toBe('not-found');
+    expect(result.failedIds).toEqual([]);
+    expect(result.failures).toEqual([]);
+  });
+
+  it('drops an unrecoverable 400 validation mutation', async () => {
+    const update = jest.fn(async () => {
+      throw {
+        status: 400,
+        message: 'Failed to update record.',
+        response: {
+          message: 'Failed to update record.',
+          data: { price: { code: 'validation_invalid_number', message: 'Must be a number.' } },
+        },
+      };
+    });
+    useCollection('menu_items', { update });
+
+    const result = await flushOutbox([
+      entry('UPDATE_MENU_PRICE', { itemId: 'm_01', price: 10 }),
+    ]);
+
+    expect(result.discarded).toHaveLength(1);
+    expect(result.discarded[0].error.kind).toBe('validation');
+    expect(result.failedIds).toEqual([]);
+  });
+
+  it('keeps retryable rule failures queued', async () => {
+    const create = jest.fn(async () => {
+      throw {
+        status: 400,
+        message: 'Failed to create record.',
+        response: { message: 'Failed to create record.', data: {} },
+      };
+    });
+    useCollection('menu_items', { create });
+    const item = createSeedMenu(1)[0] as MenuItem;
+
+    const result = await flushOutbox([
+      entry('CREATE_MENU_ITEM', { item, imageRemoved: false }),
+    ]);
+
+    expect(result.discarded).toEqual([]);
+    expect(result.failedIds).toEqual(['act_1_CREATE_MENU_ITEM']);
+    expect(result.failures[0].error.kind).toBe('rule');
+  });
+
   it('stamps the authenticated branch onto a menu stock toggle', async () => {
     const update = jest.fn(async () => undefined);
     useCollection('menu_items', { update });

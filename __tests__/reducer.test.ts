@@ -231,4 +231,42 @@ describe('appReducer', () => {
     expect(patched.storeConfig.slotIntervalMinutes).toBe(15);
     expect(patched.storeConfig.weeklySchedule).toHaveLength(7);
   });
+  it('discards a single dead-letter entry without touching the rest of the queue', () => {
+    const dead: OutboxEntry = {
+      id: 'act_dead',
+      actionType: 'UPDATE_ORDER_STATUS',
+      label: 'Order ord_102 -> READY',
+      payload: { orderId: 'ord_102', status: 'ready' },
+      createdAt: NOW,
+      retryCount: 3,
+      synced: false,
+    };
+    const alive: OutboxEntry = {
+      ...dead,
+      id: 'act_alive',
+      actionType: 'UPDATE_MENU_PRICE',
+      payload: { itemId: 'm_01', price: 12 },
+    };
+
+    const queued = appReducer(hydratedState(), { type: 'ADD_OUTBOX', entry: alive });
+    const both = appReducer(queued, { type: 'ADD_OUTBOX', entry: dead });
+    const dropped = appReducer(both, { type: 'DISCARD_OUTBOX', ids: ['act_dead'] });
+
+    expect(dropped.outbox.map((entry) => entry.id)).toEqual(['act_alive']);
+  });
+
+  it('clears the entire outbox on demand', () => {
+    const entry: OutboxEntry = {
+      id: 'act_1',
+      actionType: 'UPDATE_MENU_PRICE',
+      label: 'price',
+      payload: {},
+      createdAt: NOW,
+      retryCount: 0,
+      synced: false,
+    };
+    const queued = appReducer(hydratedState(), { type: 'ADD_OUTBOX', entry });
+
+    expect(appReducer(queued, { type: 'CLEAR_OUTBOX' }).outbox).toEqual([]);
+  });
 });
