@@ -19,10 +19,10 @@ import { DEMO_BRANCH_CODE, DEMO_EMAIL, DEMO_PASSWORD } from '../constants/branch
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { state, login } = useApp();
-  const [email, setEmail] = useState(DEMO_EMAIL);
-  const [password, setPassword] = useState(DEMO_PASSWORD);
-  const [branchCode, setBranchCode] = useState(DEMO_BRANCH_CODE);
+  const { state, login, isLiveBackend } = useApp();
+  const [email, setEmail] = useState(isLiveBackend ? '' : DEMO_EMAIL);
+  const [password, setPassword] = useState(isLiveBackend ? '' : DEMO_PASSWORD);
+  const [branchCode, setBranchCode] = useState(isLiveBackend ? '' : DEMO_BRANCH_CODE);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -78,6 +78,16 @@ export default function LoginScreen() {
             <Text style={styles.cardTitle}>Staff Sign In</Text>
             <Text style={styles.cardSubtitle}>Enter your assigned restaurant credentials</Text>
 
+            {!isLiveBackend ? (
+              <View style={styles.demoNotice}>
+                <Text style={styles.demoNoticeTitle}>LOCAL DEMO BUILD</Text>
+                <Text style={styles.demoNoticeText}>
+                  PocketBase is not configured, so live staff accounts cannot sign in.
+                  Set EXPO_PUBLIC_POCKETBASE_URL and rebuild to use RADHUNI branch codes.
+                </Text>
+              </View>
+            ) : null}
+
             {errorMessage ? (
               <View style={styles.errorBox}>
                 <Text style={styles.errorText}>{errorMessage}</Text>
@@ -117,7 +127,7 @@ export default function LoginScreen() {
                 setBranchCode(value.toUpperCase());
                 setErrorMessage(null);
               }}
-              placeholder="e.g. DT-01, UB-02"
+              placeholder={isLiveBackend ? 'e.g. RADHUNI-2-0' : 'e.g. DT-01, UB-02'}
               autoCapitalize="characters"
               testID="login_branch_input"
             />
@@ -132,23 +142,27 @@ export default function LoginScreen() {
               style={styles.submit}
             />
 
-            <Pressable
-              onPress={() => {
-                setEmail(DEMO_EMAIL);
-                setPassword(DEMO_PASSWORD);
-                setBranchCode(DEMO_BRANCH_CODE);
-                setErrorMessage(null);
-              }}
-              accessibilityRole="button"
-              style={styles.demoButton}
-              testID="login_demo_btn"
-            >
-              <Text style={styles.demoText}>Use Default Demo Credentials</Text>
-            </Pressable>
+            {!isLiveBackend ? (
+              <Pressable
+                onPress={() => {
+                  setEmail(DEMO_EMAIL);
+                  setPassword(DEMO_PASSWORD);
+                  setBranchCode(DEMO_BRANCH_CODE);
+                  setErrorMessage(null);
+                }}
+                accessibilityRole="button"
+                style={styles.demoButton}
+                testID="login_demo_btn"
+              >
+                <Text style={styles.demoText}>Use Default Demo Credentials</Text>
+              </Pressable>
+            ) : null}
           </View>
 
           <Text style={styles.footer}>
-            PocketBase AsyncAuthStore • Local SQLite Outbox Ready
+            {isLiveBackend
+              ? 'PocketBase live backend • Local SQLite Outbox Ready'
+              : 'Local demo backend • Set EXPO_PUBLIC_POCKETBASE_URL for live data'}
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -222,6 +236,25 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginTop: -8,
     marginBottom: 4,
+  },
+  demoNotice: {
+    backgroundColor: Colors.warningMuted,
+    borderWidth: 1,
+    borderColor: Colors.warning,
+    borderRadius: Radius.sm,
+    padding: 10,
+    gap: 2,
+  },
+  demoNoticeTitle: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    color: Colors.warning,
+  },
+  demoNoticeText: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: Colors.textSecondary,
   },
   errorBox: {
     backgroundColor: Colors.errorMuted,

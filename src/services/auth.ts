@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BRANCHES } from '../constants/branches';
 import { normalizeStaffRole } from '../lib/settings';
 import { nameFromEmail } from '../lib/format';
+import { branchCodesMatch, normalizeBranchCode } from '../lib/branchCodes';
 import { Branch, StaffRole, StaffSession } from '../types';
 import { pb, isPocketBaseConfigured } from './pocketbase';
 import { COLLECTIONS } from './collections';
@@ -20,8 +21,27 @@ export interface LoginInput {
 }
 
 export function findBranchByCode(code: string): Branch | undefined {
-  const normalized = code.trim().toLowerCase();
-  return BRANCHES.find((branch) => branch.code.toLowerCase() === normalized);
+  const normalized = normalizeBranchCode(code);
+  if (!normalized) return undefined;
+  return BRANCHES.find(
+    (branch) =>
+      normalizeBranchCode(branch.code) === normalized ||
+      normalizeBranchCode(branch.id) === normalized
+  );
+}
+
+/**
+ * PocketBase relation fields can be a string (maxSelect 1) or an array
+ * (maxSelect > 1). The staff record's branch assignment must be read the same
+ * way regardless of how the collection was configured.
+ */
+function firstRelationId(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+  if (Array.isArray(value)) {
+    const first = value.find((entry): entry is string => typeof entry === 'string');
+    return typeof first === 'string' ? first.trim() : '';
+  }
+  return '';
 }
 
 function resolveDemoRole(email: string): StaffRole {
@@ -79,12 +99,11 @@ async function resolveLiveBranch(
   try {
     const record = await pb.collection(COLLECTIONS.branches).getOne(branchId);
     const branch = mapBranchRecord(record);
-    if (
-      branch.code &&
-      branch.code.trim().toLowerCase() !== branchCode.trim().toLowerCase()
-    ) {
+    // Match the printed code against PocketBase's `branches.code` after
+    // normalising case, whitespace, hyphens, underscores and dots.
+    if (branch.code && !branchCodesMatch(branch.code, branchCode)) {
       throw new Error(
-        'The entered branch code does not match this staff account assignment.'
+        `The entered branch code "${branchCode}" does not match this staff account's assigned branch (${branch.code}).`
       );
     }
     return branch;
@@ -118,8 +137,7 @@ export async function loginStaff(input: LoginInput): Promise<StaffSession> {
       const auth = await pb
         .collection(COLLECTIONS.staffUsers)
         .authWithPassword(email, input.password);
-      const branchId =
-        typeof auth.record.branch_id === 'string' ? auth.record.branch_id : '';
+      const branchId = firstRelationId(auth.record.branch_id);
       if (!branchId) {
         pb.authStore.clear();
         throw new Error('Staff account is not assigned to a restaurant branch.');
@@ -161,7 +179,10 @@ export async function loginStaff(input: LoginInput): Promise<StaffSession> {
 
   const matchedBranch = findBranchByCode(branchCode);
   if (!matchedBranch) {
-    throw new Error('Unknown branch code. Check the code printed on the terminal.');
+    const demoCodes = BRANCHES.map((branch) => branch.code).join(', ');
+    throw new Error(
+      `Unknown branch code "${branchCode}". This build is using the local demo data set because EXPO_PUBLIC_POCKETBASE_URL is not configured, so only ${demoCodes} are available. Install a live build to sign in with PocketBase staff accounts.`
+    );
   }
 
   const session = localSession({ ...input, email, branchCode });
