@@ -439,6 +439,26 @@ export function createDefaultTerminalSettings(): TerminalSettings {
     },
     alertToneId: 'classic_chime',
     soundAlertsEnabled: true,
+    contact: {
+      addressLine1: '120 Market Street',
+      addressLine2: 'Springfield, IL 62701',
+      phone: '+1 217 555 0142',
+      email: 'hello@bbmanager.internal',
+    },
+    social: {
+      facebookHandle: '@bbmanager',
+      facebookUrl: 'https://facebook.com/bbmanager',
+      instagramHandle: '@bbmanager',
+      instagramUrl: 'https://instagram.com/bbmanager',
+    },
+    fees: {
+      takeout: 2,
+      packaging: 2,
+      deliveryPerKm: 5,
+    },
+    // Empty until the backend has been configured: the website falls back to
+    // its own saved routes for any event that is absent here.
+    notificationRoutes: {},
     branchName: 'Downtown Flagship',
     pocketbaseBranchId: 'branch_dt_01',
     staff: [

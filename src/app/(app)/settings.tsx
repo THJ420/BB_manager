@@ -12,6 +12,7 @@ import { SwitchRow } from '../../components/SwitchRow';
 import { TextField } from '../../components/TextField';
 import { WeeklyHoursModal } from '../../components/WeeklyHoursModal';
 import { BRANCHES } from '../../constants/branches';
+import { NOTIFICATION_EVENT_CATEGORIES } from '../../constants/notificationEvents';
 import { getAlertTone } from '../../lib/alertTones';
 import { storeHoursSummary } from '../../lib/domain';
 import { initials, roleLabel } from '../../lib/format';
@@ -22,6 +23,7 @@ import {
   AlertToneId,
   Branch,
   ConnectionStatus,
+  NotificationRoute,
   NotificationSettings,
   SmtpEncryption,
   SmtpSettings,
@@ -77,8 +79,23 @@ export default function TerminalSettingsScreen() {
   const [newStaffRole, setNewStaffRole] = useState<StaffRole>('floor_staff');
   const [staffError, setStaffError] = useState<string | null>(null);
 
+  const [activeRouteCategoryId, setActiveRouteCategoryId] = useState(
+    NOTIFICATION_EVENT_CATEGORIES[0]?.id ?? 'orders'
+  );
+  const [routeInputs, setRouteInputs] = useState<Record<string, string>>({});
+  const [feeInputs, setFeeInputs] = useState(() => ({
+    takeout: String(state.settings.fees.takeout),
+    packaging: String(state.settings.fees.packaging),
+    deliveryPerKm: String(state.settings.fees.deliveryPerKm),
+  }));
+
   useEffect(() => {
     setDraft(state.settings);
+    setFeeInputs({
+      takeout: String(state.settings.fees.takeout),
+      packaging: String(state.settings.fees.packaging),
+      deliveryPerKm: String(state.settings.fees.deliveryPerKm),
+    });
   }, [state.settings]);
 
   const session = state.session;
@@ -106,6 +123,17 @@ export default function TerminalSettingsScreen() {
   };
 
   const selectedTone = getAlertTone(draft.alertToneId);
+
+  const activeRouteCategory =
+    NOTIFICATION_EVENT_CATEGORIES.find((entry) => entry.id === activeRouteCategoryId) ??
+    NOTIFICATION_EVENT_CATEGORIES[0];
+
+  const activeRouteCount = NOTIFICATION_EVENT_CATEGORIES.reduce(
+    (total, category) =>
+      total +
+      category.events.filter((event) => draft.notificationRoutes[event.key]?.enabled).length,
+    0
+  );
 
   const updateDelivery = (
     key: keyof TerminalSettings['deliveryUrls'],
@@ -169,6 +197,66 @@ export default function TerminalSettingsScreen() {
 
   const handleBranchSwitch = async (branch: Branch) => {
     await setBranch(branch);
+  };
+
+  const updateContact = (patch: Partial<TerminalSettings['contact']>) => {
+    setDraft((current) => ({ ...current, contact: { ...current.contact, ...patch } }));
+  };
+
+  const updateSocial = (patch: Partial<TerminalSettings['social']>) => {
+    setDraft((current) => ({ ...current, social: { ...current.social, ...patch } }));
+  };
+
+  const updateFee = (key: keyof TerminalSettings['fees'], raw: string) => {
+    // Keep the raw text so a trailing dot or comma survives editing; the
+    // numeric value only reaches the draft when it parses.
+    setFeeInputs((current) => ({ ...current, [key]: raw }));
+    const parsed = Number(raw.replace(',', '.'));
+    setDraft((current) => ({
+      ...current,
+      fees: { ...current.fees, [key]: Number.isFinite(parsed) ? Math.max(0, parsed) : 0 },
+    }));
+  };
+
+  const routeFor = (key: string): NotificationRoute =>
+    draft.notificationRoutes[key] ?? { enabled: false, recipients: [] };
+
+  const updateRoute = (key: string, patch: Partial<NotificationRoute>) => {
+    setDraft((current) => ({
+      ...current,
+      notificationRoutes: {
+        ...current.notificationRoutes,
+        [key]: { ...(current.notificationRoutes[key] ?? { enabled: false, recipients: [] }), ...patch },
+      },
+    }));
+  };
+
+  const addRouteRecipient = (key: string) => {
+    const value = (routeInputs[key] ?? '').trim();
+    if (!value) return;
+    const current = routeFor(key);
+    setRouteInputs((inputs) => ({ ...inputs, [key]: '' }));
+    if (current.recipients.includes(value)) return;
+    updateRoute(key, { enabled: true, recipients: [...current.recipients, value] });
+  };
+
+  const removeRouteRecipient = (key: string, email: string) => {
+    updateRoute(key, { recipients: routeFor(key).recipients.filter((entry) => entry !== email) });
+  };
+
+  const setCategoryEnabled = (categoryId: string, enabled: boolean) => {
+    const category = NOTIFICATION_EVENT_CATEGORIES.find((entry) => entry.id === categoryId);
+    if (!category) return;
+    setDraft((current) => {
+      const next = { ...current.notificationRoutes };
+      for (const event of category.events) {
+        next[event.key] = {
+          ...(next[event.key] ?? { enabled: false, recipients: [] }),
+          enabled,
+        };
+      }
+      return { ...current, notificationRoutes: next };
+    });
   };
 
   const handleSave = async () => {
@@ -577,6 +665,134 @@ export default function TerminalSettingsScreen() {
           </View>
         </SectionCard>
 
+        <SectionCard
+          title="NOTIFICATION ROUTING"
+          right={<Text style={styles.routeBadge}>{activeRouteCount}/30 ACTIVE</Text>}
+        >
+          <Text style={styles.bodyText}>
+            Every website event can be switched on independently and sent to its own inboxes.
+            Saving here pushes straight to the storefront — no deploy needed.
+          </Text>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipRow}
+          >
+            {NOTIFICATION_EVENT_CATEGORIES.map((category) => {
+              const selected = category.id === activeRouteCategoryId;
+              const enabled = category.events.filter(
+                (event) => draft.notificationRoutes[event.key]?.enabled
+              ).length;
+
+              return (
+                <Pressable
+                  key={category.id}
+                  onPress={() => setActiveRouteCategoryId(category.id)}
+                  style={[styles.chip, selected && styles.chipActive]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={`${category.title}, ${enabled} of ${category.events.length} active`}
+                >
+                  <Text style={[styles.chipLabel, selected && styles.chipLabelActive]}>
+                    {category.title}
+                  </Text>
+                  <Text style={[styles.chipCount, selected && styles.chipCountActive]}>
+                    {enabled}/{category.events.length}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          <View style={styles.categoryHeader}>
+            <Text style={styles.categoryHint}>{activeRouteCategory.hint}</Text>
+            <View style={styles.categoryActions}>
+              <Pressable
+                onPress={() => setCategoryEnabled(activeRouteCategory.id, true)}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel="Enable every event in this category"
+              >
+                <Text style={styles.categoryAction}>ENABLE ALL</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setCategoryEnabled(activeRouteCategory.id, false)}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel="Disable every event in this category"
+              >
+                <Text style={[styles.categoryAction, styles.categoryActionMuted]}>CLEAR</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {activeRouteCategory.events.map((event) => {
+            const route = routeFor(event.key);
+
+            return (
+              <View key={event.key} style={styles.eventBlock}>
+                <SwitchRow
+                  title={event.label}
+                  subtitle={event.description}
+                  value={route.enabled}
+                  onValueChange={(enabled) => updateRoute(event.key, { enabled })}
+                  activeColor={Colors.success}
+                  activeMuted={Colors.successMuted}
+                  inactiveColor={Colors.switchThumbOff}
+                  inactiveMuted={Colors.switchTrackOff}
+                />
+
+                {route.enabled ? (
+                  <View style={styles.routeBody}>
+                    {route.recipients.length === 0 ? (
+                      <Text style={styles.routeEmpty}>
+                        No recipients yet — this event will not send until you add one.
+                      </Text>
+                    ) : (
+                      route.recipients.map((email) => (
+                        <View key={email} style={styles.recipientRow}>
+                          <Text style={styles.recipientText} numberOfLines={1}>
+                            ✉️ {email}
+                          </Text>
+                          <Pressable
+                            onPress={() => removeRouteRecipient(event.key, email)}
+                            hitSlop={8}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Remove ${email} from ${event.label}`}
+                            style={styles.removeTouch}
+                          >
+                            <Text style={styles.removeText}>✕</Text>
+                          </Pressable>
+                        </View>
+                      ))
+                    )}
+
+                    <View style={styles.addRow}>
+                      <TextField
+                        value={routeInputs[event.key] ?? ''}
+                        onChangeText={(value) =>
+                          setRouteInputs((inputs) => ({ ...inputs, [event.key]: value }))
+                        }
+                        placeholder="kitchen@restaurant.com"
+                        autoCapitalize="none"
+                        keyboardType="email-address"
+                        style={styles.addField}
+                      />
+                      <ActionButton
+                        label="+ Add"
+                        variant="primary"
+                        compact
+                        onPress={() => addRouteRecipient(event.key)}
+                      />
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+            );
+          })}
+        </SectionCard>
+
         <SectionCard title="DELIVERY PLATFORMS & STOREFRONT URLS">
           <Text style={styles.bodyText}>
             Manage the integration endpoints and storefront links for third-party courier
@@ -618,6 +834,108 @@ export default function TerminalSettingsScreen() {
             autoCapitalize="none"
             keyboardType="url"
           />
+        </SectionCard>
+
+        <SectionCard title="STOREFRONT CONTACT & SOCIAL">
+          <Text style={styles.bodyText}>
+            Published in the website footer and on every customer email. Leave a field empty to
+            hide that line on the storefront.
+          </Text>
+
+          <Text style={styles.subLabel}>LOCATION</Text>
+          <TextField
+            label="Address line 1"
+            value={draft.contact.addressLine1}
+            onChangeText={(addressLine1) => updateContact({ addressLine1 })}
+          />
+          <TextField
+            label="Address line 2"
+            value={draft.contact.addressLine2}
+            onChangeText={(addressLine2) => updateContact({ addressLine2 })}
+          />
+
+          <View style={styles.divider} />
+
+          <Text style={styles.subLabel}>REACHABILITY</Text>
+          <TextField
+            label="📞 Phone"
+            value={draft.contact.phone}
+            onChangeText={(phone) => updateContact({ phone })}
+            keyboardType="phone-pad"
+          />
+          <TextField
+            label="✉️ Contact email"
+            value={draft.contact.email}
+            onChangeText={(email) => updateContact({ email })}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+
+          <View style={styles.divider} />
+
+          <Text style={styles.subLabel}>SOCIAL PROFILES</Text>
+          <TextField
+            label="Facebook handle"
+            value={draft.social.facebookHandle}
+            onChangeText={(facebookHandle) => updateSocial({ facebookHandle })}
+            placeholder="@restaurant"
+            autoCapitalize="none"
+          />
+          <TextField
+            label="Facebook URL"
+            value={draft.social.facebookUrl}
+            onChangeText={(facebookUrl) => updateSocial({ facebookUrl })}
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+          <TextField
+            label="Instagram handle"
+            value={draft.social.instagramHandle}
+            onChangeText={(instagramHandle) => updateSocial({ instagramHandle })}
+            placeholder="@restaurant"
+            autoCapitalize="none"
+          />
+          <TextField
+            label="Instagram URL"
+            value={draft.social.instagramUrl}
+            onChangeText={(instagramUrl) => updateSocial({ instagramUrl })}
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+        </SectionCard>
+
+        <SectionCard title="FEES & PRICING">
+          <Text style={styles.bodyText}>
+            Rendered in the storefront price strip. These are display values — the terminal still
+            applies the final total at the counter.
+          </Text>
+
+          <View style={styles.feeRow}>
+            <TextField
+              label="Takeout"
+              prefix="zł"
+              value={feeInputs.takeout}
+              onChangeText={(value) => updateFee('takeout', value)}
+              keyboardType="decimal-pad"
+              style={styles.feeField}
+            />
+            <TextField
+              label="Packaging"
+              prefix="zł"
+              value={feeInputs.packaging}
+              onChangeText={(value) => updateFee('packaging', value)}
+              keyboardType="decimal-pad"
+              style={styles.feeField}
+            />
+            <TextField
+              label="Delivery / km"
+              prefix="zł"
+              value={feeInputs.deliveryPerKm}
+              onChangeText={(value) => updateFee('deliveryPerKm', value)}
+              keyboardType="decimal-pad"
+              style={styles.feeField}
+            />
+          </View>
         </SectionCard>
 
         <SectionCard title="BRANCH & STAFF ACCESS CONTROL">
@@ -931,6 +1249,95 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     color: Colors.error,
     fontWeight: '700',
+  },
+  routeBadge: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    color: Colors.primary,
+  },
+  chipRow: {
+    gap: 8,
+    paddingVertical: 2,
+    paddingRight: Spacing.md,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: Colors.surfaceBorder,
+    backgroundColor: Colors.surfaceHighlight,
+  },
+  chipActive: {
+    borderColor: Colors.primaryBorder,
+    backgroundColor: Colors.primaryMuted,
+  },
+  chipLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: Colors.textSecondary,
+  },
+  chipLabelActive: {
+    color: Colors.primary,
+  },
+  chipCount: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: Colors.textMuted,
+  },
+  chipCountActive: {
+    color: Colors.primary,
+  },
+  categoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  categoryHint: {
+    flex: 1,
+    fontSize: 11,
+    lineHeight: 15,
+    color: Colors.textMuted,
+  },
+  categoryActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  categoryAction: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    color: Colors.primary,
+  },
+  categoryActionMuted: {
+    color: Colors.textMuted,
+  },
+  eventBlock: {
+    borderTopWidth: 1,
+    borderTopColor: Colors.surfaceBorder,
+    paddingTop: 10,
+    gap: 8,
+  },
+  routeBody: {
+    gap: 8,
+    paddingLeft: 2,
+  },
+  routeEmpty: {
+    fontSize: 11,
+    fontStyle: 'italic',
+    color: Colors.textMuted,
+  },
+  feeRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  feeField: {
+    flex: 1,
   },
   safe: {
     flex: 1,

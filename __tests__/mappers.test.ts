@@ -204,6 +204,86 @@ describe('branch settings mapping', () => {
     expect(mapped.config.weeklySchedule).toEqual(config.weeklySchedule);
   });
 
+  it('round-trips storefront contact, social, fees and the event router', () => {
+    const { settings, config } = customFixtures();
+    const withStorefront = {
+      ...settings,
+      contact: {
+        addressLine1: '12 Market Street',
+        addressLine2: 'Springfield, IL 62701',
+        phone: '+1 217 555 0142',
+        email: 'hello@example.test',
+      },
+      social: {
+        facebookHandle: '@bbmanager',
+        facebookUrl: 'https://facebook.com/bbmanager',
+        instagramHandle: '@bbmanager',
+        instagramUrl: 'https://instagram.com/bbmanager',
+      },
+      fees: { takeout: 3.5, packaging: 1.25, deliveryPerKm: 6 },
+      notificationRoutes: {
+        'order.pickup.ready': { enabled: true, recipients: ['kitchen@example.test'] },
+        'menu.item.low_stock': { enabled: false, recipients: [] },
+      },
+    };
+
+    const record = asRecord({
+      ...toStoreRecord(config),
+      ...toBranchSettingsRecord(withStorefront),
+    });
+
+    const mapped = mapBranchSettingsRecord(record);
+
+    expect(mapped.settings.contact).toEqual(withStorefront.contact);
+    expect(mapped.settings.social).toEqual(withStorefront.social);
+    expect(mapped.settings.fees).toEqual(withStorefront.fees);
+    expect(mapped.settings.notificationRoutes).toEqual(withStorefront.notificationRoutes);
+  });
+
+  it('reads the legacy bare-list route shape as enabled', () => {
+    const { settings, config } = customFixtures();
+    const record = asRecord({
+      ...toStoreRecord(config),
+      ...toBranchSettingsRecord(settings),
+      notification_routes: {
+        'order.pickup.submitted': ['legacy@example.test'],
+        'order.pickup.ready': { enabled: true, recipients: ['kitchen@example.test'] },
+      },
+    });
+
+    const mapped = mapBranchSettingsRecord(record);
+
+    expect(mapped.settings.notificationRoutes['order.pickup.submitted']).toEqual({
+      enabled: true,
+      recipients: ['legacy@example.test'],
+    });
+    expect(mapped.settings.notificationRoutes['order.pickup.ready']).toEqual({
+      enabled: true,
+      recipients: ['kitchen@example.test'],
+    });
+  });
+
+  it('accepts notification routes delivered as a JSON string', () => {
+    const { settings, config } = customFixtures();
+    const record = asRecord({
+      ...toStoreRecord(config),
+      ...toBranchSettingsRecord(settings),
+      notification_routes: JSON.stringify({
+        'shop.availability.manual_closed': {
+          enabled: true,
+          recipients: ['owner@example.test'],
+        },
+      }),
+    });
+
+    const mapped = mapBranchSettingsRecord(record);
+
+    expect(mapped.settings.notificationRoutes['shop.availability.manual_closed']).toEqual({
+      enabled: true,
+      recipients: ['owner@example.test'],
+    });
+  });
+
   it('maps only the operating schedule without overwriting terminal settings', () => {
     const config = {
       ...createDefaultStoreConfig(),

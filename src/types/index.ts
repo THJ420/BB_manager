@@ -202,12 +202,50 @@ export interface DeliveryPlatformUrls {
   uberEats: string;
 }
 
+/** Storefront contact block, rendered in the website footer. */
+export interface ContactSettings {
+  addressLine1: string;
+  addressLine2: string;
+  phone: string;
+  email: string;
+}
+
+/** Social profiles linked from the website footer. */
+export interface SocialSettings {
+  facebookHandle: string;
+  facebookUrl: string;
+  instagramHandle: string;
+  instagramUrl: string;
+}
+
+/** Fees shown in the storefront price strip, in PLN. */
+export interface FeeSettings {
+  takeout: number;
+  packaging: number;
+  deliveryPerKm: number;
+}
+
+/**
+ * One operational event in the Laravel notification router.
+ *
+ * `key` is the dotted event key persisted by the backend and must match
+ * App\Support\NotificationCatalog exactly.
+ */
+export interface NotificationRoute {
+  enabled: boolean;
+  recipients: string[];
+}
+
 export interface TerminalSettings {
   smtp: SmtpSettings;
   notifications: NotificationSettings;
   alertToneId: AlertToneId;
   soundAlertsEnabled: boolean;
   deliveryUrls: DeliveryPlatformUrls;
+  contact: ContactSettings;
+  social: SocialSettings;
+  fees: FeeSettings;
+  notificationRoutes: Record<string, NotificationRoute>;
   branchName: string;
   pocketbaseBranchId: string;
   staff: StaffMember[];

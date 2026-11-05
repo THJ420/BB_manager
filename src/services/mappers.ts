@@ -234,6 +234,26 @@ export function mapBranchSettingsRecord(
         pyszne: asString(record.delivery_pyszne_url, defaults.deliveryUrls.pyszne),
         uberEats: asString(record.delivery_uber_eats_url, defaults.deliveryUrls.uberEats),
       },
+      contact: {
+        addressLine1: asString(record.contact_address_line1, defaults.contact.addressLine1),
+        addressLine2: asString(record.contact_address_line2, defaults.contact.addressLine2),
+        phone: asString(record.contact_phone, defaults.contact.phone),
+        email: asString(record.contact_email, defaults.contact.email),
+      },
+      social: {
+        facebookHandle: asString(record.social_facebook_handle, defaults.social.facebookHandle),
+        facebookUrl: asString(record.social_facebook_url, defaults.social.facebookUrl),
+        instagramHandle: asString(record.social_instagram_handle, defaults.social.instagramHandle),
+        instagramUrl: asString(record.social_instagram_url, defaults.social.instagramUrl),
+      },
+      fees: {
+        takeout: asNumber(record.takeout_fee, defaults.fees.takeout),
+        packaging: asNumber(record.packaging_fee, defaults.fees.packaging),
+        deliveryPerKm: asNumber(record.delivery_rate_per_km, defaults.fees.deliveryPerKm),
+      },
+      // Passed through raw: the normaliser handles the JSON string, the legacy
+      // list shape and the current per-event object.
+      notificationRoutes: record.notification_routes,
       alertToneId: record.alert_tone_id as TerminalSettings['alertToneId'],
       soundAlertsEnabled: asBoolean(
         record.sound_alerts_enabled,
@@ -353,5 +373,20 @@ export function toBranchSettingsRecord(
     alert_tone_id: settings.alertToneId,
     sound_alerts_enabled: settings.soundAlertsEnabled,
     staff_roster: settings.staff,
+
+    // Storefront copy, fees and the per-event router. Sent on every save so a
+    // terminal edit reaches the website without a redeploy.
+    contact_address_line1: settings.contact.addressLine1,
+    contact_address_line2: settings.contact.addressLine2,
+    contact_phone: settings.contact.phone,
+    contact_email: settings.contact.email,
+    social_facebook_handle: settings.social.facebookHandle,
+    social_facebook_url: settings.social.facebookUrl,
+    social_instagram_handle: settings.social.instagramHandle,
+    social_instagram_url: settings.social.instagramUrl,
+    takeout_fee: settings.fees.takeout,
+    packaging_fee: settings.fees.packaging,
+    delivery_rate_per_km: settings.fees.deliveryPerKm,
+    notification_routes: settings.notificationRoutes,
   };
 }
