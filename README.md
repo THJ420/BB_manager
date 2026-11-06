@@ -71,8 +71,10 @@ upserted into app state; a `delete` event removes the matching local record inst
 being ignored. When the subscription is (re)established, when the app returns to the
 foreground, and every 60 s while the outbox is empty, the provider reconciles a full
 branch snapshot so changes made on the website while the terminal was disconnected are
-not missed. With no `EXPO_PUBLIC_POCKETBASE_URL` the terminal runs in local demo mode
-(no network calls) while keeping SQLite as the source of truth.
+not missed. Every build is live-backed: `app.config.js` embeds the resolved PocketBase
+origin in the native manifest (default `https://pocket.enjoydonerkebab.pl`), so the
+terminal never silently drops into local demo mode. Demo mode (no network calls,
+SQLite as the source of truth) is opt-in only, via `EXPO_PUBLIC_POCKETBASE_URL=demo`.
 
 ### Order alerts
 
@@ -136,7 +138,28 @@ Copy `.env.example` to `.env` and set your PocketBase URL:
 EXPO_PUBLIC_POCKETBASE_URL=https://pocketbase.example.com
 ```
 
-Without a URL the app runs the local demo dataset, which is also what the tests use.
+Trailing slashes are stripped in code before the PocketBase client is constructed
+(otherwise every request hits `//api/...` and gets a 307 redirect). To run the
+offline demo dataset intentionally, set `EXPO_PUBLIC_POCKETBASE_URL=demo`. A
+missing or blank value is **not** an implicit demo request: builds default to the
+production host.
+
+`app.config.js` is evaluated on the build machine and writes the normalized URL to
+`extra.pocketbaseUrl`, which is baked into the native manifest. At runtime
+`src/services/pocketbase.ts` resolves the origin in this order:
+
+1. `process.env.EXPO_PUBLIC_POCKETBASE_URL` (inlined into the JS bundle by Metro);
+2. `Constants.expoConfig.extra.pocketbaseUrl` (native manifest, survives a bundle
+   step that did not inherit the env var);
+3. local demo mode — only when both channels are empty, or an explicit `demo`.
+
+`eas.json` sets `EXPO_PUBLIC_POCKETBASE_URL` on every build profile and
+`.github/workflows/build-apk.yml` exports it to the build steps. Verify any build
+environment with:
+
+```bash
+npx expo config --type public --json | jq '.extra.pocketbaseUrl, .extra.pocketbaseUrlSource'
+```
 
 ### Build and run locally (recommended)
 
@@ -154,8 +177,8 @@ npm run dev:ios             # build + install + start Metro with --dev-client
 
 `npx expo run:*` compiles the native binary, installs it on the target, and starts Metro with
 `--dev-client` so the dev launcher connects automatically. Subsequent JavaScript-only changes
-reload through Metro without rebuilding; run `prebuild:*` again after changing `app.json`
-plugins or native dependencies.
+reload through Metro without rebuilding; run `prebuild:*` again after changing
+`app.config.js` plugins, `extra` values or native dependencies.
 
 ### EAS Development Build (cloud or local)
 

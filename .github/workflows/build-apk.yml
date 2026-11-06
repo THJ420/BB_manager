@@ -1,21 +1,22 @@
-name: Build Android APK (EAS local)
+name: Build Android APK (EAS)
 
-# Compiles the Android APK on GitHub's Ubuntu runner instead of waiting in the
-# Expo EAS free-tier cloud queue. `eas build --local` still talks to Expo only to
-# verify the project and (for the preview profile) download the managed Android
-# keystore, so an EXPO_TOKEN repository secret is required.
+# Two independent paths produce a preview APK on push to main, so no build has
+# to run on a developer machine:
+#   1. `eas-cloud-preview` queues a real EAS cloud build (needs EXPO_TOKEN).
+#   2. `build-apk` compiles on the Ubuntu runner with `eas build --local`, and
+#      falls back to a plain Gradle release build when no Expo token is present.
 #
 # Required repository secret:
 #   EXPO_TOKEN  - Expo personal access token (https://expo.dev/settings/access-tokens)
 #
-# If EXPO_TOKEN is missing or invalid, the workflow falls back to a plain Gradle
-# release build (debug-signed APK) so it still produces an installable artifact.
-# Add the secret for a managed EAS-signed APK.
-#
 # Optional repository variable:
 #   EXPO_PUBLIC_POCKETBASE_URL - defaults to https://pocket.enjoydonerkebab.pl
 #
-# The generated APK is attached to the workflow run as a downloadable artifact.
+# Every job exports EXPO_PUBLIC_POCKETBASE_URL to the bundling step and asserts
+# via `expo config` that app.config.js baked the live URL into extra. A build
+# can therefore never silently ship in local demo mode.
+#
+# The runner-built APK is attached to the workflow run as a downloadable artifact.
 
 on:
   workflow_dispatch:
@@ -152,6 +153,35 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify live PocketBase configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "EXPO_PUBLIC_POCKETBASE_URL=$EXPO_PUBLIC_POCKETBASE_URL"
+          if [ -z "${EXPO_PUBLIC_POCKETBASE_URL:-}" ] || [ "${EXPO_PUBLIC_POCKETBASE_URL,,}" = "demo" ]; then
+            echo "::error::EXPO_PUBLIC_POCKETBASE_URL must be a real URL, got '${EXPO_PUBLIC_POCKETBASE_URL:-}'"
+            exit 1
+          fi
+
+          # app.config.js is evaluated with the same environment as the build
+          # steps. Assert the normalized URL is actually baked into `extra`.
+          # Pipe via stdin so no temp-file path assumptions are needed.
+          npx expo config --type public --json | node -e '
+            let src = "";
+            process.stdin.on("data", (chunk) => { src += chunk; });
+            process.stdin.on("end", () => {
+              const config = JSON.parse(src);
+              const url = config.extra && config.extra.pocketbaseUrl;
+              const source = config.extra && config.extra.pocketbaseUrlSource;
+              const expected = process.env.EXPO_PUBLIC_POCKETBASE_URL.replace(/\/+$/, "");
+              console.log("extra.pocketbaseUrl:", url, "| source:", source);
+              if (url !== expected || url === "demo") {
+                console.error("::error::expo config resolved pocketbaseUrl to " + url + ", expected " + expected);
+                process.exit(1);
+              }
+            });
+          '
+
       - name: Install EAS CLI
         run: npm install --global eas-cli
 
@@ -187,6 +217,10 @@ jobs:
         # If EAS fails for a credentials/cloud reason, still try the Gradle
         # fallback below instead of failing the whole workflow immediately.
         continue-on-error: true
+        # Re-export explicitly: app.config.js and Metro both read this while
+        # generating the native project and the release JS bundle.
+        env:
+          EXPO_PUBLIC_POCKETBASE_URL: ${{ vars.EXPO_PUBLIC_POCKETBASE_URL || 'https://pocket.enjoydonerkebab.pl' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -201,6 +235,9 @@ jobs:
       - name: Build APK with Gradle fallback
         id: gradle_build
         if: steps.expo_auth.outputs.available != 'true' || steps.eas_build.outcome == 'failure'
+        # The Gradle bundle task still runs Metro; keep the live URL in its env.
+        env:
+          EXPO_PUBLIC_POCKETBASE_URL: ${{ vars.EXPO_PUBLIC_POCKETBASE_URL || 'https://pocket.enjoydonerkebab.pl' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -275,3 +312,78 @@ jobs:
           path: build/*.apk
           if-no-files-found: error
           retention-days: 30
+
+  # Queue a managed EAS cloud build. Expo's builders compile the APK, so this
+  # job never runs Gradle/Metro on a runner and cannot hit a local build timeout.
+  # eas.json exports EXPO_PUBLIC_POCKETBASE_URL to the EAS build environment.
+  eas-cloud-preview:
+    name: Queue EAS cloud preview APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "true"
+      EXPO_NO_TELEMETRY: "1"
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EXPO_PUBLIC_POCKETBASE_URL: ${{ vars.EXPO_PUBLIC_POCKETBASE_URL || 'https://pocket.enjoydonerkebab.pl' }}
+    steps:
+      - name: Skip when Expo credentials are absent
+        if: env.EXPO_TOKEN == ''
+        run: echo "::notice::EXPO_TOKEN is not configured; skipping the EAS cloud build. The build-apk job still produces an installable APK."
+
+      - name: Check out repository
+        if: env.EXPO_TOKEN != ''
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        if: env.EXPO_TOKEN != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        if: env.EXPO_TOKEN != ''
+        run: npm ci
+
+      - name: Verify live PocketBase configuration
+        if: env.EXPO_TOKEN != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx expo config --type public --json | node -e '
+            let src = "";
+            process.stdin.on("data", (chunk) => { src += chunk; });
+            process.stdin.on("end", () => {
+              const config = JSON.parse(src);
+              const url = config.extra && config.extra.pocketbaseUrl;
+              const source = config.extra && config.extra.pocketbaseUrlSource;
+              const expected = process.env.EXPO_PUBLIC_POCKETBASE_URL.replace(/\/+$/, "");
+              console.log("extra.pocketbaseUrl:", url, "| source:", source);
+              if (url !== expected || url === "demo") {
+                console.error("::error::EAS build would use a non-live PocketBase URL: " + url);
+                process.exit(1);
+              }
+            });
+          '
+
+      - name: Install EAS CLI
+        if: env.EXPO_TOKEN != ''
+        run: npm install --global eas-cli
+
+      - name: Queue preview APK on EAS
+        if: env.EXPO_TOKEN != ''
+        env:
+          EXPO_PUBLIC_POCKETBASE_URL: ${{ vars.EXPO_PUBLIC_POCKETBASE_URL || 'https://pocket.enjoydonerkebab.pl' }}
+        shell: bash
+        # --no-wait returns as soon as Expo has scheduled the build; the APK is
+        # produced by EAS cloud, not by this runner.
+        run: |
+          set -euo pipefail
+          eas build --platform android --profile preview --non-interactive --no-wait
+          {
+            echo "### EAS cloud preview APK queued"
+            echo ""
+            echo "Profile: \`preview\` · PocketBase: \`$EXPO_PUBLIC_POCKETBASE_URL\`"
+            echo ""
+            echo "Track the build and download the APK from https://expo.dev/builds"
+          } >> "$GITHUB_STEP_SUMMARY"

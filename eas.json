@@ -6,6 +6,9 @@
     "dev:development": {
       "developmentClient": true,
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_POCKETBASE_URL": "https://pocket.enjoydonerkebab.pl"
+      },
       "android": {
         "buildType": "apk"
       },
@@ -15,6 +18,9 @@
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_POCKETBASE_URL": "https://pocket.enjoydonerkebab.pl"
+      },
       "android": {
         "buildType": "apk"
       },
@@ -22,6 +28,9 @@
     },
     "production": {
       "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_POCKETBASE_URL": "https://pocket.enjoydonerkebab.pl"
+      },
       "android": {
         "buildType": "app-bundle"
       },

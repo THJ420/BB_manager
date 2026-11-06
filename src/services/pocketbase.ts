@@ -1,7 +1,14 @@
 import PocketBase, { AsyncAuthStore } from 'pocketbase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { installEventSourcePolyfill } from './eventSource';
+import {
+  normalizePocketBaseUrl,
+  resolvePocketBaseUrl,
+  type PocketBaseDemoReason,
+  type PocketBaseUrlSource,
+} from './pocketbaseUrl';
 
 // React Native has no global EventSource. PocketBase's realtime service opens its
 // SSE channel with `new EventSource(...)`, so install the XHR-based polyfill
@@ -9,19 +16,46 @@ import { installEventSourcePolyfill } from './eventSource';
 installEventSourcePolyfill();
 
 const AUTH_STORAGE_KEY = 'bb_pocketbase_auth';
-// A trailing slash would make every request hit `//api/...`, which PocketBase
-// answers with a 307 redirect on each call.
-const configuredUrl = (process.env.EXPO_PUBLIC_POCKETBASE_URL ?? '')
-  .trim()
-  .replace(/\/+$/, '');
 
 /**
- * When no backend URL is supplied the terminal runs in local demo mode:
- * SQLite remains the source of truth and realtime subscriptions are skipped.
+ * Read `extra.pocketbaseUrl` from the manifest that app.config.js embedded at
+ * prebuild time. `expoConfig` is populated for EAS builds, but modern EAS
+ * Update manifests keep their config under `manifest2.extra.expoConfig`, so
+ * both shapes are checked before giving up.
  */
-export const isPocketBaseConfigured = configuredUrl.length > 0;
+function readExpoExtra(): Record<string, unknown> {
+  const constants = Constants as unknown as {
+    expoConfig?: { extra?: Record<string, unknown> } | null;
+    manifest2?: {
+      extra?: { expoConfig?: { extra?: Record<string, unknown> } };
+    } | null;
+  };
+  const extra =
+    constants.expoConfig?.extra ??
+    constants.manifest2?.extra?.expoConfig?.extra;
+  return extra && typeof extra === 'object' ? extra : {};
+}
 
-const baseUrl = isPocketBaseConfigured ? configuredUrl : 'http://127.0.0.1:8090';
+/**
+ * Resolution order: the inlined EXPO_PUBLIC_POCKETBASE_URL first, then the URL
+ * baked into the native manifest by app.config.js. Only a genuinely empty pair
+ * (or an explicit `demo` value) enables local demo mode, so a build that was
+ * given a URL can never silently lose its live backend.
+ */
+const resolution = resolvePocketBaseUrl({
+  envUrl: process.env.EXPO_PUBLIC_POCKETBASE_URL,
+  extraUrl: readExpoExtra().pocketbaseUrl,
+});
+
+/** `false` = local demo mode (SQLite is the source of truth, no realtime). */
+export const isPocketBaseConfigured = resolution.configured;
+export const pocketBaseUrlSource: PocketBaseUrlSource = resolution.source;
+export const pocketBaseDemoReason: PocketBaseDemoReason | null =
+  resolution.demoReason ?? null;
+
+// In demo mode the client is never used for network I/O (all services are
+// gated on isPocketBaseConfigured); the placeholder keeps the SDK constructible.
+const baseUrl = resolution.configured ? resolution.url : 'http://127.0.0.1:8090';
 
 export const pbAuthStore = new AsyncAuthStore({
   save: async (serialized: string) => {
@@ -88,7 +122,7 @@ pb.afterSend = (response, data, options?: { signal?: AbortSignal | null }) => {
 };
 
 export function setPocketBaseUrl(url: string): void {
-  const trimmed = url.trim().replace(/\/+$/, '');
+  const trimmed = normalizePocketBaseUrl(url);
   if (trimmed.startsWith('http')) {
     pb.baseUrl = trimmed;
   }
@@ -120,6 +154,9 @@ export async function isPocketBaseReachable(timeoutMs = 6_000): Promise<boolean>
 export interface PocketBaseDiagnostics {
   url: string;
   configured: boolean;
+  /** Which channel supplied the URL: env var, native manifest, or demo mode. */
+  urlSource: PocketBaseUrlSource;
+  demoReason: PocketBaseDemoReason | null;
   authenticated: boolean;
   authValid: boolean;
   recordId: string;
@@ -155,6 +192,8 @@ export function pocketBaseDiagnostics(): PocketBaseDiagnostics {
   return {
     url: pb.baseUrl,
     configured: isPocketBaseConfigured,
+    urlSource: pocketBaseUrlSource,
+    demoReason: pocketBaseDemoReason,
     authenticated: Boolean(pb.authStore.isValid && asText(record.id)),
     authValid: Boolean(pb.authStore.isValid),
     recordId: asText(record.id),
@@ -166,8 +205,13 @@ export function pocketBaseDiagnostics(): PocketBaseDiagnostics {
 }
 
 if (__DEV__) {
-  console.log('[pb] base URL:', pb.baseUrl, '| configured:', isPocketBaseConfigured);
-  if (/localhost|127\.0\.0\.1/.test(pb.baseUrl) && Platform.OS !== 'web') {
+  console.log(
+    '[pb] base URL:', pb.baseUrl,
+    '| configured:', isPocketBaseConfigured,
+    '| source:', pocketBaseUrlSource,
+    '| demoReason:', pocketBaseDemoReason
+  );
+  if (isPocketBaseConfigured && /localhost|127\.0\.0\.1/.test(pb.baseUrl) && Platform.OS !== 'web') {
     console.warn(
       '[pb] EXPO_PUBLIC_POCKETBASE_URL points at this device itself — ' +
         'restart Metro with `npx expo start -c` after fixing .env.'
