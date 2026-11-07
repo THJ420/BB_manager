@@ -1,8 +1,8 @@
 import * as ImagePicker from 'expo-image-picker';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Colors, Radius } from '../theme/colors';
-import { MENU_CATEGORIES } from '../lib/domain';
+import { normalizeCategoryName } from '../services/categories';
 import { parsePrice } from '../lib/format';
 import { newMenuItemId } from '../lib/ids';
 import { MenuItem } from '../types';
@@ -22,6 +22,10 @@ export interface MenuItemEditorModalProps {
   /** Managers and kitchen leads may delete, per menu_items.deleteRule. */
   canDelete?: boolean;
   onDelete?: () => void;
+  /** Live categories for this branch (PocketBase + categories in use). */
+  categories?: string[];
+  /** Called when staff saves a brand-new category name. */
+  onCreateCategory?: (name: string) => void;
 }
 
 type PhotoSource = 'camera' | 'library';
@@ -35,9 +39,14 @@ export function MenuItemEditorModal({
   canEditDetails = true,
   canDelete = false,
   onDelete,
+  categories = [],
+  onCreateCategory,
 }: MenuItemEditorModalProps) {
+  const categoriesRef = useRef(categories);
+  categoriesRef.current = categories;
+
   const [name, setName] = useState('');
-  const [category, setCategory] = useState('Burgers');
+  const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [priceText, setPriceText] = useState('12.50');
@@ -45,11 +54,26 @@ export function MenuItemEditorModal({
   const [isVisible, setIsVisible] = useState(true);
   const [nameError, setNameError] = useState<string | null>(null);
   const [priceError, setPriceError] = useState<string | null>(null);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
+
+  const suggestions = useMemo(() => {
+    const needle = category.trim().toLowerCase();
+    return categories
+      .filter((entry) => !needle || entry.toLowerCase().includes(needle))
+      .slice(0, 12);
+  }, [categories, category]);
+
+  const isNewCategory = useMemo(() => {
+    const clean = normalizeCategoryName(category);
+    return clean.length > 0 && !categories.some(
+      (entry) => entry.toLowerCase() === clean.toLowerCase()
+    );
+  }, [categories, category]);
 
   useEffect(() => {
     if (!visible) return;
     setName(item?.name ?? '');
-    setCategory(item?.category ?? 'Burgers');
+    setCategory(item?.category ?? categoriesRef.current[0] ?? '');
     setDescription(item?.description ?? '');
     setImageUrl(item?.imageUrl ?? '');
     setPriceText(item ? item.price.toFixed(2) : '12.50');
@@ -57,6 +81,7 @@ export function MenuItemEditorModal({
     setIsVisible(item?.isVisible ?? true);
     setNameError(null);
     setPriceError(null);
+    setCategoryError(null);
   }, [visible, item]);
 
   const pickPhoto = async (source: PhotoSource) => {
@@ -113,14 +138,26 @@ export function MenuItemEditorModal({
       setPriceError('Enter a valid price, e.g. 12.50.');
       valid = false;
     }
+    const cleanCategory = normalizeCategoryName(category);
+    if (!cleanCategory) {
+      setCategoryError('Choose or type a category.');
+      valid = false;
+    }
     if (!valid || price === null) return;
+
+    // A free-text category is created upstream (dedicated `categories`
+    // collection) and also travels on the menu item, so the webhook carries it
+    // to the Laravel backend and the website immediately.
+    if (isNewCategory && onCreateCategory) {
+      onCreateCategory(cleanCategory);
+    }
 
     onSave({
       // PocketBase custom IDs are exactly 15 lowercase alphanumeric chars.
       id: item?.id ?? newMenuItemId(),
       branchId: item?.branchId ?? branchId,
       name: name.trim(),
-      category,
+      category: cleanCategory,
       description: description.trim() || 'Fresh kitchen preparation',
       price,
       currency: item?.currency ?? 'PLN',
@@ -173,17 +210,35 @@ export function MenuItemEditorModal({
 
       <View style={styles.fieldGroup}>
         <Text style={styles.fieldLabel}>Category</Text>
-        <View style={styles.categoryRow}>
-          {MENU_CATEGORIES.map((entry) => {
-            const selected = category === entry;
+        <TextField
+          label="Category *"
+          editable={canEditDetails}
+          value={category}
+          onChangeText={(value) => {
+            setCategory(value);
+            setCategoryError(null);
+          }}
+          placeholder="Type a new category or pick one below"
+          errorText={categoryError ?? undefined}
+          testID="input_item_category"
+          maxLength={80}
+        />
+
+        <View style={styles.suggestionRow}>
+          {suggestions.map((entry) => {
+            const selected = category.trim().toLowerCase() === entry.toLowerCase();
             return (
               <Pressable
                 key={entry}
-                onPress={() => setCategory(entry)}
+                onPress={() => {
+                  setCategory(entry);
+                  setCategoryError(null);
+                }}
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
+                testID={`category_chip_${entry}`}
                 style={[
-                  styles.categoryChip,
+                  styles.suggestionChip,
                   selected ? styles.categoryChipSelected : styles.categoryChipIdle,
                 ]}
               >
@@ -197,6 +252,12 @@ export function MenuItemEditorModal({
             );
           })}
         </View>
+
+        {isNewCategory ? (
+          <Text style={styles.createHint} testID="category_create_hint">
+            + “{normalizeCategoryName(category)}” will be created and synced upstream.
+          </Text>
+        ) : null}
       </View>
 
       {!canEditDetails ? (
@@ -361,6 +422,25 @@ const styles = StyleSheet.create({
   categoryRow: {
     flexDirection: 'row',
     gap: 4,
+  },
+  suggestionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  suggestionChip: {
+    minHeight: 36,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  createHint: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: Colors.primary,
+    fontWeight: '700',
   },
   categoryChip: {
     flex: 1,

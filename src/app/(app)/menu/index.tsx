@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActionButton } from '../../../components/ActionButton';
@@ -9,7 +9,11 @@ import { MenuItemEditorModal } from '../../../components/MenuItemEditorModal';
 import { ScreenHeader } from '../../../components/ScreenHeader';
 import { TextField } from '../../../components/TextField';
 import { usePullToRefresh } from '../../../hooks/usePullToRefresh';
-import { filterMenu, menuCategoryOptions } from '../../../lib/domain';
+import { filterMenu, menuCategoryOptions, mergeCategoryNames } from '../../../lib/domain';
+import {
+  createCategoryUpstream,
+  fetchBranchCategories,
+} from '../../../services/categories';
 import { useApp } from '../../../state/AppProvider';
 import {
   canCreateMenuItems,
@@ -31,10 +35,37 @@ export default function MenuStockScreen() {
   const [editorVisible, setEditorVisible] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MenuItem | null>(null);
+  const [remoteCategories, setRemoteCategories] = useState<string[]>([]);
+  const branchId = state.activeBranch.id;
+
+  // Categories are fetched from PocketBase rather than hardcoded. The derived
+  // list from menuItems keeps the UI usable offline and makes a category saved
+  // on an item appear immediately, before the next refresh.
+  useEffect(() => {
+    let alive = true;
+    void fetchBranchCategories(branchId, state.menuItems).then((names) => {
+      if (alive) setRemoteCategories(names);
+    });
+    return () => {
+      alive = false;
+    };
+    // Re-run when the catalogue size changes (a new item may introduce a
+    // category) or the active branch changes.
+  }, [branchId, state.menuItems.length]);
+
+  const categories = useMemo(
+    () => mergeCategoryNames(remoteCategories, state.menuItems.map((item) => item.category)),
+    [remoteCategories, state.menuItems]
+  );
+
+  const handleCreateCategory = (name: string) => {
+    setRemoteCategories((prev) => mergeCategoryNames(prev, [name]));
+    void createCategoryUpstream(branchId, name);
+  };
 
   const categoryOptions = useMemo(
-    () => menuCategoryOptions(state.menuItems),
-    [state.menuItems]
+    () => menuCategoryOptions(state.menuItems, remoteCategories),
+    [state.menuItems, remoteCategories]
   );
   const filteredItems = useMemo(
     () => filterMenu(state.menuItems, selectedCategory, searchQuery),
@@ -143,6 +174,8 @@ export default function MenuStockScreen() {
           setEditingItem(null);
         }}
         onSave={(item) => void saveMenuItem(item)}
+        categories={categories}
+        onCreateCategory={handleCreateCategory}
       />
 
       <DialogModal

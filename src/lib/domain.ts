@@ -108,10 +108,40 @@ export function orderTiming(order: Order, now: number) {
   };
 }
 
+/**
+ * @deprecated Only used by the offline demo seed. Real categories come from
+ * PocketBase / the menu items themselves - never from a hardcoded list.
+ */
 export const MENU_CATEGORIES = ['Burgers', 'Sides', 'Beverages', 'Desserts'] as const;
 
-export function menuCategoryOptions(items: MenuItem[]): Array<FilterChipOption<string>> {
-  const categories = ['All', ...MENU_CATEGORIES];
+/** Trim, collapse case-insensitive duplicates and keep a stable sort order. */
+export function mergeCategoryNames(...groups: Array<Array<string | null | undefined>>): string[] {
+  const seen = new Map<string, string>();
+  for (const group of groups) {
+    for (const raw of group) {
+      const name = (raw ?? '').trim();
+      if (!name) continue;
+      const key = name.toLowerCase();
+      if (!seen.has(key)) seen.set(key, name);
+    }
+  }
+  return Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
+}
+
+/** Categories actually in use, derived from the live menu snapshot. */
+export function categoriesFromMenu(items: MenuItem[]): string[] {
+  return mergeCategoryNames(items.map((item) => item.category));
+}
+
+/**
+ * Dynamic filter chips: "All" plus whatever categories exist for this branch,
+ * optionally merged with the dedicated `categories` collection upstream.
+ */
+export function menuCategoryOptions(
+  items: MenuItem[],
+  extraCategories: string[] = []
+): Array<FilterChipOption<string>> {
+  const categories = ['All', ...mergeCategoryNames(categoriesFromMenu(items), extraCategories)];
   return categories.map((category) => ({
     id: category,
     label: category,
