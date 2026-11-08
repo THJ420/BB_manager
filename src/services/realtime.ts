@@ -54,27 +54,40 @@ function recordBranchId(record: RecordModel | null | undefined): string {
   return '';
 }
 
+export interface RealtimeOptions {
+  /** Owner console: subscribe across every branch, orders + reservations only. */
+  allBranches?: boolean;
+}
+
 /**
  * Opens PocketBase realtime (SSE) subscriptions for every operational
  * collection belonging to the signed-in branch. The branch filter is sent to the
  * server, so records from another branch are never transmitted to this device;
  * the local comparison is a second gate, not the only one. Returns a cleanup
  * function.
+ *
+ * With `allBranches` (owner console) there is no branch filter: PocketBase's
+ * collection rules already restrict the stream to the owner role, and only the
+ * order/reservation collections are subscribed.
  */
 export async function startRealtime(
   branchId: string,
-  handlers: RealtimeHandlers
+  handlers: RealtimeHandlers,
+  options: RealtimeOptions = {}
 ): Promise<() => void> {
   if (!isPocketBaseConfigured) {
     handlers.onStatus('live');
     return () => undefined;
   }
 
-  const scopedBranchId = assertBranchScope(branchId);
-  const filter = pb.filter('branch_id = {:branchId}', { branchId: scopedBranchId });
-  const subscribeOptions = { filter };
+  const allBranches = options.allBranches === true;
+  const scopedBranchId = allBranches ? '' : assertBranchScope(branchId);
+  const subscribeOptions = allBranches
+    ? {}
+    : { filter: pb.filter('branch_id = {:branchId}', { branchId: scopedBranchId }) };
 
   const belongsToBranch = (record: RecordModel): boolean => {
+    if (allBranches) return true;
     const recordBranch = recordBranchId(record).toLowerCase();
     if (!recordBranch) return false;
     return recordBranch === scopedBranchId.trim().toLowerCase();
@@ -90,22 +103,6 @@ export async function startRealtime(
       },
     ],
     [
-      COLLECTIONS.menuItems,
-      'menu_item',
-      (record) => {
-        if (!belongsToBranch(record)) return;
-        handlers.onMenuItem(mapMenuRecord(record));
-      },
-    ],
-    [
-      COLLECTIONS.tables,
-      'table',
-      (record) => {
-        if (!belongsToBranch(record)) return;
-        handlers.onTable(mapTableRecord(record));
-      },
-    ],
-    [
       COLLECTIONS.reservations,
       'reservation',
       (record) => {
@@ -113,7 +110,30 @@ export async function startRealtime(
         handlers.onReservation(mapReservationRecord(record));
       },
     ],
-    [
+  ];
+
+  if (!allBranches) {
+    subscriptions.splice(
+      1,
+      0,
+      [
+        COLLECTIONS.menuItems,
+        'menu_item',
+        (record) => {
+          if (!belongsToBranch(record)) return;
+          handlers.onMenuItem(mapMenuRecord(record));
+        },
+      ],
+      [
+        COLLECTIONS.tables,
+        'table',
+        (record) => {
+          if (!belongsToBranch(record)) return;
+          handlers.onTable(mapTableRecord(record));
+        },
+      ]
+    );
+    subscriptions.push([
       COLLECTIONS.branchSettings,
       null,
       (record) => {
@@ -126,8 +146,8 @@ export async function startRealtime(
         handlers.onStoreConfig(mapped.config);
         handlers.onSettings(mapped.settings);
       },
-    ],
-  ];
+    ]);
+  }
 
   const unsubscribers: Array<() => void> = [];
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Redirect } from 'expo-router';
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActionButton } from '../../../components/ActionButton';
@@ -82,6 +83,11 @@ export default function MenuStockScreen() {
     setEditingItem(item);
     setEditorVisible(true);
   };
+
+  // Owner accounts are not branch-scoped; menu edits belong to a terminal.
+  if (state.session?.role === 'owner') {
+    return <Redirect href="/(app)/analytics" />;
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>

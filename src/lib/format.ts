@@ -78,8 +78,12 @@ export function nameFromEmail(email: string): string {
   return titleCaseWords(localPart.replace(/[._-]+/g, ' ')) || 'Floor Staff';
 }
 
-export function roleLabel(role: 'manager' | 'kitchen_lead' | 'floor_staff'): string {
+export function roleLabel(
+  role: 'owner' | 'manager' | 'kitchen_lead' | 'floor_staff'
+): string {
   switch (role) {
+    case 'owner':
+      return 'Owner / Super Admin';
     case 'manager':
       return 'Kitchen Lead & Manager';
     case 'kitchen_lead':

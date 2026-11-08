@@ -27,7 +27,7 @@ const DAY_NAMES: DayName[] = [
   'Sunday',
 ];
 
-const STAFF_ROLES: StaffRole[] = ['manager', 'kitchen_lead', 'floor_staff'];
+const STAFF_ROLES: StaffRole[] = ['owner', 'manager', 'kitchen_lead', 'floor_staff'];
 const SMTP_ENCRYPTIONS: SmtpEncryption[] = ['TLS', 'SSL', 'STARTTLS'];
 
 /**

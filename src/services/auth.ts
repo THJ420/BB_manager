@@ -17,7 +17,14 @@ const DEMO_BRANCH_ID = 'branch_dt_01';
 export interface LoginInput {
   email: string;
   password: string;
-  branchCode: string;
+  /** Required for branch terminals; omitted for owner (all-branch) logins. */
+  branchCode?: string;
+}
+
+const OWNER_BRANCH_NAME = 'All Branches';
+
+export function isOwnerRole(role: unknown): boolean {
+  return role === 'owner';
 }
 
 export function findBranchByCode(code: string): Branch | undefined {
@@ -52,7 +59,8 @@ function resolveDemoRole(email: string): StaffRole {
 }
 
 function localSession(input: LoginInput): StaffSession {
-  const branch = findBranchByCode(input.branchCode) ?? (BRANCHES[0] as Branch);
+  const branchCode = input.branchCode ?? '';
+  const branch = findBranchByCode(branchCode) ?? (BRANCHES[0] as Branch);
   return {
     id: `usr_${Date.now() % 10_000}`,
     email: input.email.trim(),
@@ -65,7 +73,13 @@ function localSession(input: LoginInput): StaffSession {
 
 export async function persistSession(session: StaffSession): Promise<void> {
   await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(session));
-  await AsyncStorage.setItem(BRANCH_KEY, session.branchId);
+  if (session.branchId) {
+    await AsyncStorage.setItem(BRANCH_KEY, session.branchId);
+  } else {
+    // Owner sessions are not pinned to a branch; a stale BRANCH_KEY would make
+    // the next hydrate look branch-scoped.
+    await AsyncStorage.removeItem(BRANCH_KEY);
+  }
 }
 
 export async function restoreSession(): Promise<StaffSession | null> {
@@ -73,7 +87,19 @@ export async function restoreSession(): Promise<StaffSession | null> {
     const raw = await AsyncStorage.getItem(SESSION_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<StaffSession>;
-    if (!parsed.email || !parsed.branchId) return null;
+    if (!parsed.email) return null;
+    if (isOwnerRole(parsed.role)) {
+      rememberAssignedBranchId('');
+      return {
+        id: parsed.id ?? `usr_${Date.now() % 10_000}`,
+        email: parsed.email,
+        name: parsed.name ?? nameFromEmail(parsed.email),
+        role: 'owner',
+        branchId: '',
+        branchName: OWNER_BRANCH_NAME,
+      };
+    }
+    if (!parsed.branchId) return null;
     const branch = BRANCHES.find((entry) => entry.id === parsed.branchId);
     rememberAssignedBranchId(parsed.branchId);
     return {
@@ -123,13 +149,10 @@ async function resolveLiveBranch(
 
 export async function loginStaff(input: LoginInput): Promise<StaffSession> {
   const email = input.email.trim();
-  const branchCode = input.branchCode.trim();
+  const branchCode = (input.branchCode ?? '').trim();
 
   if (!email || !input.password.trim()) {
     throw new Error('Please enter both email and password.');
-  }
-  if (!branchCode) {
-    throw new Error('Branch Code is required for local pickup routing.');
   }
 
   if (isPocketBaseConfigured) {
@@ -137,7 +160,40 @@ export async function loginStaff(input: LoginInput): Promise<StaffSession> {
       const auth = await pb
         .collection(COLLECTIONS.staffUsers)
         .authWithPassword(email, input.password);
+      const role = normalizeStaffRole(
+        auth.record.role,
+        resolveDemoRole(String(auth.record.role ?? email))
+      );
       const branchId = firstRelationId(auth.record.branch_id);
+
+      // Owners are not tied to a branch: they load the cross-branch dashboard
+      // and never trigger terminal ringing.
+      if (role === 'owner') {
+        if (branchCode) {
+          throw new Error(
+            'Owner accounts monitor every branch — leave the branch code blank.'
+          );
+        }
+        rememberAssignedBranchId('');
+        const ownerSession: StaffSession = {
+          id: auth.record.id,
+          email: auth.record.email || email,
+          name:
+            typeof auth.record.name === 'string' && auth.record.name
+              ? auth.record.name
+              : nameFromEmail(email),
+          role: 'owner',
+          branchId: '',
+          branchName: OWNER_BRANCH_NAME,
+        };
+        await persistSession(ownerSession);
+        return ownerSession;
+      }
+
+      if (!branchCode) {
+        pb.authStore.clear();
+        throw new Error('Branch Code is required for local pickup routing.');
+      }
       if (!branchId) {
         pb.authStore.clear();
         throw new Error('Staff account is not assigned to a restaurant branch.');
@@ -152,10 +208,7 @@ export async function loginStaff(input: LoginInput): Promise<StaffSession> {
           typeof auth.record.name === 'string' && auth.record.name
             ? auth.record.name
             : nameFromEmail(email),
-        role: normalizeStaffRole(
-          auth.record.role,
-          resolveDemoRole(String(auth.record.role ?? email))
-        ),
+        role,
         branchId,
         branchName: branch.name,
       };
@@ -166,6 +219,8 @@ export async function loginStaff(input: LoginInput): Promise<StaffSession> {
       if (error instanceof Error && error.message) {
         if (
           error.message.startsWith('The entered branch code') ||
+          error.message.startsWith('Owner accounts monitor every branch') ||
+          error.message === 'Branch Code is required for local pickup routing.' ||
           error.message === 'Staff account is not assigned to a restaurant branch.' ||
           error.message === 'The assigned restaurant branch no longer exists.' ||
           error.message === 'Unable to load the assigned restaurant branch.'
@@ -175,6 +230,12 @@ export async function loginStaff(input: LoginInput): Promise<StaffSession> {
       }
       throw new Error(publicNetworkError(error));
     }
+  }
+
+  if (!branchCode) {
+    throw new Error(
+      'Branch Code is required for local pickup routing in demo mode.'
+    );
   }
 
   const matchedBranch = findBranchByCode(branchCode);

@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -38,6 +38,7 @@ const CONNECTION_MODES: Array<{ id: ConnectionStatus; label: string }> = [
 ];
 
 const ROLE_LABELS: Record<StaffRole, string> = {
+  owner: 'OWNER',
   manager: 'MANAGER',
   kitchen_lead: 'KITCHEN LEAD',
   floor_staff: 'FLOOR STAFF',
@@ -302,6 +303,11 @@ export default function TerminalSettingsScreen() {
     () => (pendingCount > 0 ? Colors.warning : Colors.success),
     [pendingCount]
   );
+
+  // Branch settings require a branch; the owner console is aggregate-only.
+  if (state.session?.role === 'owner') {
+    return <Redirect href="/(app)/analytics" />;
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>

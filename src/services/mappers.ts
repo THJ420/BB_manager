@@ -165,6 +165,7 @@ export function mapReservationRecord(record: RecordModel): Reservation {
     customerPhone: asString(record.customer_phone),
     guestCount: asNumber(record.guest_count, 1),
     reservationTime: asString(record.reservation_time),
+    reservationAt: asString(record.reservation_time) || undefined,
     tableNumber: asString(record.table_number) || undefined,
     status: normalizeReservationStatus(record.status),
     specialRequests: asString(record.special_requests) || undefined,

@@ -16,7 +16,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   },
 }));
 
-import { findBranchByCode } from '../src/services/auth';
+import { findBranchByCode, isOwnerRole } from '../src/services/auth';
 
 describe('findBranchByCode', () => {
   it('matches demo branch codes regardless of case, spaces, hyphens or underscores', () => {
@@ -28,5 +28,14 @@ describe('findBranchByCode', () => {
 
   it('returns undefined for a live PocketBase-only code in demo mode', () => {
     expect(findBranchByCode('RADHUNI-2-0')).toBeUndefined();
+  });
+});
+
+describe('isOwnerRole', () => {
+  it('only treats the canonical owner role as cross-branch', () => {
+    expect(isOwnerRole('owner')).toBe(true);
+    expect(isOwnerRole('manager')).toBe(false);
+    expect(isOwnerRole(undefined)).toBe(false);
+    expect(isOwnerRole('OWNER')).toBe(false);
   });
 });

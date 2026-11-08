@@ -10,6 +10,7 @@ import React, {
   ReactNode,
 } from 'react';
 import { AppState as NativeAppState } from 'react-native';
+import { router } from 'expo-router';
 import { BRANCHES } from '../constants/branches';
 import { buildOutboxEntry, buildSimulatedOrder, sortOutboxChronologically } from '../lib/domain';
 import { normalizeTerminalSettings } from '../lib/settings';
@@ -24,6 +25,11 @@ import {
 } from '../lib/seed';
 import * as db from '../db/sqlite';
 import { startAlertToneLoop, stopAlertTone } from '../services/alertTones';
+import {
+  addPickupPushListeners,
+  clearTerminalPushToken,
+  registerTerminalPushToken,
+} from '../services/push';
 import { appReducer, AppState, initialAppState } from './reducer';
 import {
   loginStaff,
@@ -50,7 +56,7 @@ import { startRealtime, RealtimeEntity } from '../services/realtime';
 import { flushOutbox, SyncFailure } from '../services/sync';
 import { describeSyncHint } from '../services/errors';
 import { runNetworkProbe, NetworkProbeResult } from '../services/networkProbe';
-import { fetchBranchSnapshot, BranchSnapshot } from '../services/data';
+import { fetchBranchSnapshot, fetchOwnerSnapshot, BranchSnapshot } from '../services/data';
 import { IncomingOrderCallModal } from '../components/IncomingOrderCallModal';
 import { RejectOrderModal } from '../components/RejectOrderModal';
 import {
@@ -100,6 +106,8 @@ export interface SyncDiagnosticsReport {
 interface AppContextValue {
   state: AppState;
   isLiveBackend: boolean;
+  /** True for the cross-branch owner console; terminal alerts stay muted. */
+  isOwner: boolean;
   login: (email: string, password: string, branchCode: string) => Promise<LoginResult>;
   logout: () => Promise<void>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
@@ -140,6 +148,18 @@ const OUTBOX_RETRY_INTERVAL_MS = 30_000;
  * with no queued local writes.
  */
 const REMOTE_REFRESH_INTERVAL_MS = 60_000;
+
+/** Synthetic branch shown while the owner console renders the whole network. */
+function ownerBranch(): Branch {
+  return {
+    id: '',
+    name: 'All Branches',
+    code: 'ALL',
+    address: '',
+    phone: '',
+    isActive: true,
+  };
+}
 
 function syntheticBranch(
   branchId: string,
@@ -185,6 +205,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [incomingCalls, setIncomingCalls] = useState<Order[]>([]);
   const [rejectingOrder, setRejectingOrder] = useState<Order | null>(null);
   const activeIncomingCall = incomingCalls[0] ?? null;
+  const isOwner = state.session?.role === 'owner';
 
   useEffect(() => {
     stateRef.current = state;
@@ -376,6 +397,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [state.hydrated, state.settings]);
 
   const enqueueIncomingCall = useCallback((order: Order): void => {
+    // Owner accounts observe every branch: ringing would fire once per branch
+    // and stack alarms across the whole network.
+    if (stateRef.current.session?.role === 'owner') return;
     if (order.status !== 'new') return;
     setIncomingCalls((current) =>
       current.some((call) => call.id === order.id) ? current : [...current, order]
@@ -422,9 +446,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Ring the configured tone until the active call is accepted/rejected, the
   // reject-reason dialog is open, the terminal is muted, or the tone changes.
+  // Owner logins never ring (multi-store concurrency safety).
   useEffect(() => {
     if (
       !state.hydrated ||
+      state.session?.role === 'owner' ||
       !activeIncomingCall ||
       rejectingOrder ||
       !state.settings.soundAlertsEnabled
@@ -440,6 +466,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void startAlertToneLoop(toneId);
   }, [
     state.hydrated,
+    state.session?.role,
     activeIncomingCall,
     rejectingOrder,
     state.settings.soundAlertsEnabled,
@@ -537,6 +564,59 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [refreshRemoteData]
   );
 
+  /**
+   * Owner console refresh: loads every branch's orders and reservations. No
+   * branch snapshot is applied, so menu/tables/settings stay untouched.
+   */
+  const refreshOwnerData = useCallback(
+    async (options: { silent?: boolean } = {}): Promise<void> => {
+      if (!isPocketBaseConfigured) return;
+      if (stateRef.current.session?.role !== 'owner') return;
+
+      const requestId = remoteRequestIdRef.current + 1;
+      remoteRequestIdRef.current = requestId;
+      if (!options.silent) {
+        dispatch({ type: 'SET_CONNECTION', status: 'polling' });
+      }
+
+      try {
+        const snapshot = await fetchOwnerSnapshot();
+        if (
+          requestId !== remoteRequestIdRef.current ||
+          stateRef.current.session?.role !== 'owner'
+        ) {
+          return;
+        }
+        dispatch({
+          type: 'APPLY_REMOTE_DATA',
+          payload: {
+            activeBranch: ownerBranch(),
+            branches: snapshot.branches.length
+              ? snapshot.branches
+              : stateRef.current.branches,
+            orders: snapshot.orders,
+            analyticsHistory: snapshot.analyticsHistory,
+            menuItems: [],
+            tables: [],
+            reservations: snapshot.reservations,
+            storeConfig: stateRef.current.storeConfig,
+            settings: stateRef.current.settings,
+            syncedAt: Date.now(),
+          },
+        });
+        if (!options.silent) {
+          dispatch({ type: 'SET_CONNECTION', status: 'live' });
+        }
+      } catch (error) {
+        console.warn('Unable to refresh the owner dashboard snapshot', error);
+        if (!options.silent && requestId === remoteRequestIdRef.current) {
+          dispatch({ type: 'SET_CONNECTION', status: 'offline' });
+        }
+      }
+    },
+    []
+  );
+
   // Load the branch-scoped live dataset whenever the signed-in branch changes.
   useEffect(() => {
     if (!state.hydrated) return;
@@ -545,56 +625,71 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
     if (!isPocketBaseConfigured) return;
+    if (state.session.role === 'owner') {
+      if (remoteLoadedBranchRef.current === '') return;
+      remoteLoadedBranchRef.current = '';
+      void refreshOwnerData();
+      return;
+    }
     if (remoteLoadedBranchRef.current === state.session.branchId) return;
     void refreshRemoteData(state.session.branchId);
-  }, [state.hydrated, state.session, refreshRemoteData]);
+  }, [state.hydrated, state.session, refreshRemoteData, refreshOwnerData]);
 
   // PocketBase SSE keeps the board, menu, tables, bookings and settings live.
   useEffect(() => {
     if (!state.hydrated || !state.session || !isPocketBaseConfigured) return;
     const branchId = state.session.branchId;
+    const owner = state.session.role === 'owner';
     let disposed = false;
     let cleanup: (() => void) | null = null;
 
-    void startRealtime(branchId, {
-      onOrder: (order) => {
-        // Invalidate any snapshot that was already in flight when this insert
-        // arrived. Otherwise an older REST response could land afterwards and
-        // replace the live board (and the inbound-call record) with stale data.
-        remoteRequestIdRef.current += 1;
-        const isNewOrder = !stateRef.current.orders.some(
-          (entry) => entry.id === order.id
-        );
-        dispatch({ type: 'UPSERT_ORDER', order });
-        if (isNewOrder && order.status === 'new') enqueueIncomingCall(order);
+    void startRealtime(
+      branchId,
+      {
+        onOrder: (order) => {
+          // Invalidate any snapshot that was already in flight when this insert
+          // arrived. Otherwise an older REST response could land afterwards and
+          // replace the live board (and the inbound-call record) with stale data.
+          remoteRequestIdRef.current += 1;
+          const isNewOrder = !stateRef.current.orders.some(
+            (entry) => entry.id === order.id
+          );
+          dispatch({ type: 'UPSERT_ORDER', order });
+          if (isNewOrder && order.status === 'new') enqueueIncomingCall(order);
+        },
+        onMenuItem: (item) => dispatch({ type: 'UPSERT_MENU_ITEM', item }),
+        onTable: (table) => dispatch({ type: 'SAVE_TABLE', table }),
+        onReservation: (reservation) =>
+          dispatch({ type: 'UPSERT_RESERVATION', reservation }),
+        onDelete: (entity: RealtimeEntity, id: string) => {
+          if (entity === 'menu_item') {
+            dispatch({ type: 'REMOVE_MENU_ITEM', itemId: id });
+          } else if (entity === 'table') {
+            dispatch({ type: 'REMOVE_TABLE', tableId: id });
+          } else if (entity === 'reservation') {
+            dispatch({ type: 'REMOVE_RESERVATION', reservationId: id });
+          } else if (entity === 'order') {
+            dispatch({ type: 'REMOVE_ORDER', orderId: id });
+          }
+        },
+        onStoreConfig: (config) => dispatch({ type: 'SET_STORE_CONFIG', config }),
+        onSettings: (settings) => dispatch({ type: 'SET_SETTINGS', settings }),
+        onStatus: (status) => {
+          dispatch({ type: 'SET_CONNECTION', status });
+          if (status === 'live' && !realtimeReadyRef.current) {
+            realtimeReadyRef.current = true;
+            // PocketBase does not replay changes that happened while SSE was
+            // down, so reconcile once as soon as a subscription is established.
+            if (owner) {
+              void refreshOwnerData({ silent: true });
+            } else {
+              void refreshRemoteDataSilently(branchId);
+            }
+          }
+        },
       },
-      onMenuItem: (item) => dispatch({ type: 'UPSERT_MENU_ITEM', item }),
-      onTable: (table) => dispatch({ type: 'SAVE_TABLE', table }),
-      onReservation: (reservation) =>
-        dispatch({ type: 'UPSERT_RESERVATION', reservation }),
-      onDelete: (entity: RealtimeEntity, id: string) => {
-        if (entity === 'menu_item') {
-          dispatch({ type: 'REMOVE_MENU_ITEM', itemId: id });
-        } else if (entity === 'table') {
-          dispatch({ type: 'REMOVE_TABLE', tableId: id });
-        } else if (entity === 'reservation') {
-          dispatch({ type: 'REMOVE_RESERVATION', reservationId: id });
-        } else if (entity === 'order') {
-          dispatch({ type: 'REMOVE_ORDER', orderId: id });
-        }
-      },
-      onStoreConfig: (config) => dispatch({ type: 'SET_STORE_CONFIG', config }),
-      onSettings: (settings) => dispatch({ type: 'SET_SETTINGS', settings }),
-      onStatus: (status) => {
-        dispatch({ type: 'SET_CONNECTION', status });
-        if (status === 'live' && !realtimeReadyRef.current) {
-          realtimeReadyRef.current = true;
-          // PocketBase does not replay changes that happened while SSE was
-          // down, so reconcile once as soon as a subscription is established.
-          void refreshRemoteDataSilently(branchId);
-        }
-      },
-    }).then((dispose) => {
+      { allBranches: owner }
+    ).then((dispose) => {
       if (disposed) dispose();
       else cleanup = dispose;
     });
@@ -607,8 +702,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [
     state.hydrated,
     state.session?.branchId,
+    state.session?.role,
     enqueueIncomingCall,
     refreshRemoteDataSilently,
+    refreshOwnerData,
     realtimeEpoch,
   ]);
 
@@ -633,13 +730,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async (email: string, password: string, branchCode: string): Promise<LoginResult> => {
       try {
         const session = await loginStaff({ email, password, branchCode });
+        if (session.role === 'owner') {
+          setIncomingCalls([]);
+          setRejectingOrder(null);
+          stopAlertTone();
+        }
         const settings = stateRef.current.settings;
-        const branch = resolveBranch(
-          session.branchId,
-          stateRef.current.branches,
-          session,
-          settings
-        );
+        const branch =
+          session.role === 'owner'
+            ? ownerBranch()
+            : resolveBranch(
+                session.branchId,
+                stateRef.current.branches,
+                session,
+                settings
+              );
         dispatch({ type: 'LOGIN', session, branch });
         return { ok: true };
       } catch (error) {
@@ -655,12 +760,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async (): Promise<void> => {
     remoteRequestIdRef.current += 1;
     remoteLoadedBranchRef.current = null;
+    const userId = stateRef.current.session?.id;
+    if (userId) {
+      void clearTerminalPushToken(userId);
+    }
     setIncomingCalls([]);
     setRejectingOrder(null);
     stopAlertTone();
     await logoutStaff();
     dispatch({ type: 'LOGOUT' });
   }, []);
+
+  // Employee terminals register an Expo push token so a locked/minimised phone
+  // is woken by PocketBase even while the SSE socket is suspended.
+  useEffect(() => {
+    if (!state.hydrated || !state.session || !isPocketBaseConfigured) return;
+    if (state.session.role === 'owner') return;
+    void registerTerminalPushToken(state.session.id);
+  }, [state.hydrated, state.session?.id, state.session?.role]);
+
+  // Tapping a pickup push opens the live board; receiving one while the app is
+  // running forces a reconcile so the ticket is on screen before the alarm.
+  useEffect(() => {
+    if (!state.hydrated || !state.session || !isPocketBaseConfigured) return;
+    return addPickupPushListeners({
+      onPickupPush: () => {
+        const session = stateRef.current.session;
+        if (!session) return;
+        if (session.role === 'owner') {
+          void refreshOwnerData({ silent: true });
+          return;
+        }
+        if (session.branchId) {
+          void refreshRemoteDataSilently(session.branchId);
+        }
+      },
+      onOpenOrders: () => {
+        router.replace('/(app)');
+      },
+    });
+  }, [
+    state.hydrated,
+    state.session?.id,
+    state.session?.role,
+    refreshOwnerData,
+    refreshRemoteDataSilently,
+  ]);
 
   const updateOrderStatus = useCallback(
     async (orderId: string, status: OrderStatus): Promise<void> => {
@@ -1066,13 +1211,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await new Promise((resolve) => setTimeout(resolve, 350));
       return;
     }
+    if (stateRef.current.session?.role === 'owner') {
+      await refreshOwnerData({ silent: true });
+      return;
+    }
     const branchId = stateRef.current.session?.branchId;
     if (!branchId) return;
     if (stateRef.current.outbox.length > 0) {
       await syncOutboxNow();
     }
     await refreshRemoteData(branchId, { silent: true });
-  }, [refreshRemoteData, syncOutboxNow]);
+  }, [refreshOwnerData, refreshRemoteData, syncOutboxNow]);
 
   /**
    * Flips the terminal out of OFFLINE as soon as the host answers /api/health,
@@ -1101,12 +1250,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!state.hydrated || !state.session || !isPocketBaseConfigured) return;
     const branchId = state.session.branchId;
+    const owner = state.session.role === 'owner';
     const timer = setInterval(() => {
       if (stateRef.current.connection === 'offline') return;
+      if (owner) {
+        void refreshOwnerData({ silent: true });
+        return;
+      }
       void refreshRemoteDataSilently(branchId);
     }, REMOTE_REFRESH_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [state.hydrated, state.session?.branchId, refreshRemoteDataSilently]);
+  }, [
+    state.hydrated,
+    state.session?.branchId,
+    state.session?.role,
+    refreshRemoteDataSilently,
+    refreshOwnerData,
+  ]);
 
   // Returning from the background is the most common way a terminal misses a
   // website change; probe first so an offline device does not block on fetch.
@@ -1114,14 +1274,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!state.hydrated || !state.session || !isPocketBaseConfigured) return;
     const subscription = NativeAppState.addEventListener('change', (next) => {
       if (next !== 'active') return;
-      const branchId = stateRef.current.session?.branchId;
-      if (!branchId) return;
+      const session = stateRef.current.session;
+      if (!session) return;
+      const owner = session.role === 'owner';
+      const branchId = session.branchId;
       void probeConnection().then((reachable) => {
         if (!reachable) return;
         // The OS may have silently torn down the SSE socket while the app was
         // suspended without firing an error. Rebuilding the subscriptions is
         // cheap and guarantees live order alerts resume on the first frame.
         setRealtimeEpoch((epoch) => epoch + 1);
+        if (owner) {
+          void refreshOwnerData({ silent: true });
+          return;
+        }
+        if (!branchId) return;
         void refreshRemoteDataSilently(branchId);
         void syncOutboxNow();
       });
@@ -1130,8 +1297,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [
     state.hydrated,
     state.session?.branchId,
+    state.session?.role,
     probeConnection,
     refreshRemoteDataSilently,
+    refreshOwnerData,
     syncOutboxNow,
   ]);
 
@@ -1248,6 +1417,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setBranch = useCallback(
     async (branch: Branch): Promise<void> => {
+      // The owner console aggregates every branch and never swaps its dataset.
+      if (stateRef.current.session?.role === 'owner') return;
       if (branch.id === stateRef.current.activeBranch.id) return;
 
       // A live terminal is pinned to the branch on the staff record; only the
@@ -1296,6 +1467,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     () => ({
       state,
       isLiveBackend: isPocketBaseConfigured,
+      isOwner,
       login,
       logout,
       updateOrderStatus,
@@ -1322,6 +1494,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }),
     [
       state,
+      isOwner,
       login,
       logout,
       updateOrderStatus,
@@ -1351,11 +1524,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <AppContext.Provider value={value}>
       {children}
-      <IncomingOrderCallModal
-        order={rejectingOrder ? null : activeIncomingCall}
-        onAccept={acceptIncomingCall}
-        onReject={requestRejectIncomingCall}
-      />
+      {isOwner ? null : (
+        <IncomingOrderCallModal
+          order={rejectingOrder ? null : activeIncomingCall}
+          onAccept={acceptIncomingCall}
+          onReject={requestRejectIncomingCall}
+        />
+      )}
       <RejectOrderModal
         visible={rejectingOrder !== null}
         order={rejectingOrder}

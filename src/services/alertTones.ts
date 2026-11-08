@@ -1,4 +1,5 @@
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
+import { Platform } from 'react-native';
 import classicChime from '../../assets/sounds/classic_chime.wav';
 import kitchenBell from '../../assets/sounds/kitchen_bell.wav';
 import digitalBeep from '../../assets/sounds/digital_beep.wav';
@@ -36,18 +37,20 @@ let playbackToken = 0;
 let audioModePromise: Promise<void> | null = null;
 let loopActive = false;
 let loopToneId: AlertToneId | null = null;
-let loopRestartTimer: ReturnType<typeof setTimeout> | null = null;
-
-/** Pause between repeats so the alarm reads as a ring rather than a drone. */
-const LOOP_GAP_MS = 1200;
+/** Native looping player: keeps ringing after the JS runtime is suspended. */
+let loopPlayer: AudioPlayer | null = null;
 
 function ensureAudioMode(): Promise<void> {
   if (!audioModePromise) {
     audioModePromise = setAudioModeAsync({
       playsInSilentMode: true,
-      interruptionMode: 'mixWithOthers',
+      // Exclusive, persistent focus keeps the alarm audible over music and
+      // prevents other apps from resuming on top of an incoming order.
+      interruptionMode: 'doNotMixPersistent',
       allowsRecording: false,
-      shouldPlayInBackground: false,
+      // Audio must survive backgrounding / screen lock: the native player keeps
+      // repeating the tone while the JS timer queue is frozen by the OS.
+      shouldPlayInBackground: true,
       shouldRouteThroughEarpiece: false,
     }).catch((error: unknown) => {
       audioModePromise = null;
@@ -55,6 +58,18 @@ function ensureAudioMode(): Promise<void> {
     });
   }
   return audioModePromise;
+}
+
+function releaseLoopPlayer(): void {
+  const player = loopPlayer;
+  loopPlayer = null;
+  if (!player) return;
+  try {
+    player.pause();
+    player.remove();
+  } catch {
+    // The player may already have been released by the platform.
+  }
 }
 
 function releaseActivePlayer(): void {
@@ -81,12 +96,9 @@ function releaseActivePlayer(): void {
 export function stopAlertTone(): void {
   loopActive = false;
   loopToneId = null;
-  if (loopRestartTimer) {
-    clearTimeout(loopRestartTimer);
-    loopRestartTimer = null;
-  }
   playbackToken += 1;
   releaseActivePlayer();
+  releaseLoopPlayer();
 }
 
 /**
@@ -148,35 +160,53 @@ export async function playAlertTone(
   }
 }
 
-async function playLoopIteration(toneId: AlertToneId): Promise<boolean> {
-  if (!loopActive || loopToneId !== toneId) return false;
-
-  return playAlertTone(toneId, () => {
-    if (!loopActive || loopToneId !== toneId) return;
-
-    if (loopRestartTimer) clearTimeout(loopRestartTimer);
-    loopRestartTimer = setTimeout(() => {
-      loopRestartTimer = null;
-      if (loopActive && loopToneId === toneId) {
-        void playLoopIteration(toneId);
-      }
-    }, LOOP_GAP_MS);
-  });
-}
-
 /**
- * Plays the selected tone continuously until stopAlertTone() is called. This is
- * the incoming-call alarm: it repeats the configured preset instead of using a
- * separate hard-coded siren.
+ * Plays the selected tone continuously until stopAlertTone() is called. The
+ * repetition is handled by the native audio player (`loop = true`) instead of a
+ * JS timer chain, so an incoming pickup order keeps ringing after the app is
+ * backgrounded, minimised, or the device screen is locked.
  */
 export async function startAlertToneLoop(toneId: AlertToneId): Promise<boolean> {
   loopActive = true;
   loopToneId = toneId;
 
-  if (loopRestartTimer) {
-    clearTimeout(loopRestartTimer);
-    loopRestartTimer = null;
+  releaseLoopPlayer();
+
+  const source = TONE_ASSETS[toneId];
+  if (source === undefined) return false;
+
+  try {
+    await ensureAudioMode();
+  } catch (error) {
+    console.warn('Unable to configure terminal alert audio', error);
   }
 
-  return playLoopIteration(toneId);
+  if (!loopActive || loopToneId !== toneId) return false;
+
+  try {
+    const player = createAudioPlayer(source, { updateInterval: 1000 });
+    loopPlayer = player;
+    player.loop = true;
+    player.volume = 1;
+
+    if (Platform.OS === 'android') {
+      // Android stops untracked background playback after roughly three
+      // minutes; an active lock-screen session is what keeps the alarm alive.
+      try {
+        player.setActiveForLockScreen(true, {
+          title: 'Incoming pickup order',
+          artist: 'BB Manager',
+        });
+      } catch {
+        // Older Android builds may not expose the media session.
+      }
+    }
+
+    player.play();
+    return true;
+  } catch (error) {
+    console.warn('Unable to play terminal alert tone', error);
+    releaseLoopPlayer();
+    return false;
+  }
 }

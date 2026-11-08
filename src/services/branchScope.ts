@@ -56,10 +56,19 @@ export function requireAssignedBranchId(): string {
 /**
  * Returns the authenticated branch id, rejecting any request that names a
  * different one — including rows replayed from a stale offline SQLite cache.
+ *
+ * Owner accounts span every branch: they must name the branch explicitly for a
+ * read, and still cannot mutate without a concrete branch scope.
  */
 export function assertBranchScope(branchId?: string): string {
-  const assigned = requireAssignedBranchId();
   const wanted = (branchId ?? '').trim();
+  if (isOwnerSession()) {
+    if (wanted) return wanted;
+    throw new BranchScopeError(
+      'Owner accounts must select a branch before changing operations.'
+    );
+  }
+  const assigned = requireAssignedBranchId();
   if (wanted && wanted !== assigned) {
     throw new BranchScopeError(
       `This account is assigned to branch ${assigned}, not ${wanted}.`
@@ -99,9 +108,17 @@ export function scopeWritePayload(
 export function assignedRole(): StaffRole | '' {
   const record = pb.authStore.record as Record<string, unknown> | null;
   const role = record?.role;
-  return role === 'manager' || role === 'kitchen_lead' || role === 'floor_staff'
+  return role === 'owner' ||
+    role === 'manager' ||
+    role === 'kitchen_lead' ||
+    role === 'floor_staff'
     ? role
     : '';
+}
+
+/** True when the signed-in PocketBase account is the cross-branch owner. */
+export function isOwnerSession(): boolean {
+  return assignedRole() === 'owner';
 }
 
 /**

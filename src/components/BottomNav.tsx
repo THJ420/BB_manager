@@ -25,6 +25,13 @@ const TABS: NavTab[] = [
   { key: 'settings', label: 'Store Settings', href: '/(app)/settings', icon: 'settings' },
 ];
 
+/** Owner console: cross-branch metrics, live orders and reservations only. */
+const OWNER_TABS: NavTab[] = [
+  { key: 'analytics', label: 'Dashboard', href: '/(app)/analytics', icon: 'insights' },
+  { key: 'orders', label: 'Live Orders', href: '/(app)', icon: 'list' },
+  { key: 'tables', label: 'Reservations', href: '/(app)/reservations', icon: 'event-seat' },
+];
+
 function resolveActiveTab(pathname: string): NavTab['key'] {
   if (pathname.startsWith('/menu')) return 'menu';
   if (pathname.startsWith('/tables') || pathname.startsWith('/reservations')) return 'tables';
@@ -37,9 +44,10 @@ export function BottomNav() {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
-  const { state } = useApp();
+  const { state, isOwner } = useApp();
   const activeKey = resolveActiveTab(pathname);
   const activeOrders = countActiveOrders(state.orders);
+  const tabs = isOwner ? OWNER_TABS : TABS;
 
   return (
     <View
@@ -47,7 +55,7 @@ export function BottomNav() {
       accessibilityRole="tablist"
     >
       <View style={styles.row}>
-        {TABS.map((tab) => {
+        {tabs.map((tab) => {
           const selected = tab.key === activeKey;
           return (
             <Pressable

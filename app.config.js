@@ -42,7 +42,7 @@ module.exports = {
   expo: {
     name: 'BB Manager',
     slug: 'bb-manager',
-    version: '1.2.0',
+    version: '1.3.0',
     orientation: 'default',
     scheme: 'bbmanager',
     userInterfaceStyle: 'dark',
@@ -55,6 +55,11 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.bbmanager.app',
+      infoPlist: {
+        // Keeps the incoming-order alarm audible after backgrounding/locking and
+        // lets the OS deliver silent/wake pushes for the pickup fan-out.
+        UIBackgroundModes: ['audio', 'remote-notification'],
+      },
     },
     android: {
       package: 'com.bbmanager.app',
@@ -63,6 +68,10 @@ module.exports = {
         'android.permission.INTERNET',
         'android.permission.CAMERA',
         'android.permission.MODIFY_AUDIO_SETTINGS',
+        'android.permission.POST_NOTIFICATIONS',
+        'android.permission.VIBRATE',
+        'android.permission.WAKE_LOCK',
+        'android.permission.RECEIVE_BOOT_COMPLETED',
       ],
     },
     web: {
@@ -84,7 +93,16 @@ module.exports = {
           microphonePermission: false,
           recordAudioAndroid: false,
           enableBackgroundRecording: false,
-          enableBackgroundPlayback: false,
+          // Adds UIBackgroundModes:audio (iOS) and the mediaPlayback foreground
+          // service + FOREGROUND_SERVICE_MEDIA_PLAYBACK (Android) so the alarm
+          // loop keeps ringing on a locked/minimised terminal.
+          enableBackgroundPlayback: true,
+        },
+      ],
+      [
+        'expo-notifications',
+        {
+          color: '#F97316',
         },
       ],
       [

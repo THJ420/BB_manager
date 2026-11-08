@@ -72,6 +72,55 @@ async function fetchSettingsRecord(branchId: string): Promise<RecordModel | null
 }
 
 /**
+ * Cross-branch dataset for the owner console. Owners bypass the branch scope
+ * (PocketBase grants aggregate read access to the `owner` role) while writes
+ * stay impossible because no branch is assigned.
+ */
+export interface OwnerSnapshot {
+  branches: Branch[];
+  orders: Order[];
+  analyticsHistory: Order[];
+  reservations: Reservation[];
+}
+
+export async function fetchOwnerSnapshot(
+  now: number = Date.now()
+): Promise<OwnerSnapshot> {
+  if (!isPocketBaseConfigured) {
+    throw new Error('PocketBase is not configured.');
+  }
+
+  const analyticsStart = new Date(
+    now - ANALYTICS_LOOKBACK_DAYS * 24 * 60 * 60 * 1000
+  ).toISOString();
+  const operationalStart = now - OPERATIONAL_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
+
+  const [branches, orderRecords, reservationRecords] = await Promise.all([
+    fetchBranches(),
+    pb.collection(COLLECTIONS.orders).getFullList<RecordModel>(PAGE_SIZE, {
+      filter: pb.filter('created >= {:start}', { start: analyticsStart }),
+      sort: '-created',
+    }),
+    pb.collection(COLLECTIONS.reservations).getFullList<RecordModel>(PAGE_SIZE, {
+      sort: '-created',
+    }),
+  ]);
+
+  const analyticsHistory = newestFirst(orderRecords.map(mapOrderRecord));
+  const orders = analyticsHistory.filter((order) => {
+    if (order.status !== 'completed' && order.status !== 'cancelled') return true;
+    return Date.parse(order.createdAt) >= operationalStart;
+  });
+
+  return {
+    branches,
+    orders,
+    analyticsHistory,
+    reservations: reservationRecords.map(mapReservationRecord),
+  };
+}
+
+/**
  * Loads the complete live operational dataset for one branch. Orders cover the
  * analytics year; the board receives active tickets plus the last seven days.
  */

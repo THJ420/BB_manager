@@ -32,6 +32,7 @@ export default function OrdersBoardScreen() {
     updateOrderStatus,
     rejectOrder,
     refreshData,
+    isOwner,
   } = useApp();
   const { width } = useWindowDimensions();
   const now = useNow(30_000);
@@ -72,6 +73,13 @@ export default function OrdersBoardScreen() {
     () => filterOrders(state.orders, selectedFilter),
     [state.orders, selectedFilter]
   );
+  const branchCodes = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const branch of state.branches) {
+      byId.set(branch.id, branch.code || branch.name);
+    }
+    return byId;
+  }, [state.branches]);
 
   useEffect(() => {
     if (selectedOrderId && state.orders.some((order) => order.id === selectedOrderId)) return;
@@ -96,10 +104,12 @@ export default function OrdersBoardScreen() {
           order={item}
           now={now}
           onAdvance={handleAdvance}
-          onReject={(order) => setRejectTarget(order)}
+          onReject={isOwner ? undefined : (order) => setRejectTarget(order)}
           onSelect={isTabletSplit ? (order) => setSelectedOrderId(order.id) : undefined}
           selected={isTabletSplit && orderIsSelected(item, selectedOrder)}
           highlighted={item.id === highlightedOrderId}
+          readOnly={isOwner}
+          branchLabel={isOwner ? branchCodes.get(item.branchId) : undefined}
         />
       )}
       ItemSeparatorComponent={() => <View style={styles.listSeparator} />}
@@ -130,8 +140,12 @@ export default function OrdersBoardScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <ScreenHeader
-        title="Orders Board"
-        subtitle={`${state.activeBranch.name} • ${state.activeBranch.code}`}
+        title={isOwner ? 'Network Orders Board' : 'Orders Board'}
+        subtitle={
+          isOwner
+            ? 'All Branches • Cross-store live board'
+            : `${state.activeBranch.name} • ${state.activeBranch.code}`
+        }
         right={
           <ConnectionBadge
             status={state.connection}

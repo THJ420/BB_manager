@@ -16,7 +16,7 @@ import { Colors, Radius, Spacing } from '../../theme/colors';
 
 export default function ReservationsScreen() {
   const router = useRouter();
-  const { state, updateReservationStatus } = useApp();
+  const { state, updateReservationStatus, isOwner } = useApp();
   const [selectedFilter, setSelectedFilter] = useState<ReservationFilter>('all');
 
   const filterOptions = useMemo(
@@ -30,12 +30,23 @@ export default function ReservationsScreen() {
   const arrivedCount = state.reservations.filter(
     (reservation) => reservation.status === 'arrived'
   ).length;
+  const branchCodes = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const branch of state.branches) {
+      byId.set(branch.id, branch.code || branch.name);
+    }
+    return byId;
+  }, [state.branches]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <ScreenHeader
         title="Guest Reservations"
-        subtitle={`${state.activeBranch.name} • Bookings & arrival dispatch`}
+        subtitle={
+          isOwner
+            ? 'All Branches • Cross-store booking ledger'
+            : `${state.activeBranch.name} • Bookings & arrival dispatch`
+        }
         right={
           <View style={styles.lobbyPill}>
             <Text style={styles.lobbyText}>{arrivedCount} In Lobby</Text>
@@ -63,6 +74,8 @@ export default function ReservationsScreen() {
         renderItem={({ item }) => (
           <ReservationCard
             reservation={item}
+            readOnly={isOwner}
+            branchLabel={isOwner ? branchCodes.get(item.branchId) : undefined}
             onToggleArrival={(reservationId, status) =>
               void updateReservationStatus(reservationId, status)
             }

@@ -21,6 +21,7 @@ import {
 } from '../../lib/analytics';
 import { formatCurrency, formatPercent } from '../../lib/format';
 import { useApp } from '../../state/AppProvider';
+import { OwnerDashboard } from '../../components/OwnerDashboard';
 import { Colors, Radius, Spacing } from '../../theme/colors';
 import { FilterChipOption } from '../../types';
 
@@ -63,7 +64,7 @@ const EFFICIENCY_TONES: Record<
 };
 
 export default function AnalyticsScreen() {
-  const { state } = useApp();
+  const { state, isOwner } = useApp();
   const now = useNow(60_000);
   const [rangePreset, setRangePreset] = useState<AnalyticsRangePreset>('today');
   const [customRange, setCustomRange] = useState<AnalyticsDateRange | null>(null);
@@ -92,6 +93,10 @@ export default function AnalyticsScreen() {
   );
   const efficiencyTone = EFFICIENCY_TONES[efficiencyGrade.tone];
   const defaultCustomRange = useMemo(() => getDefaultCustomRange(now), [now]);
+
+  if (isOwner) {
+    return <OwnerDashboard />;
+  }
 
   const handleRangeSelect = (preset: AnalyticsRangePreset) => {
     if (preset === 'custom') {

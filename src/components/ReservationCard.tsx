@@ -8,19 +8,34 @@ import { ActionButton } from './ActionButton';
 export interface ReservationCardProps {
   reservation: Reservation;
   onToggleArrival: (reservationId: string, status: ReservationStatus) => void;
+  /** Owner console: view-only booking across branches. */
+  readOnly?: boolean;
+  branchLabel?: string;
 }
 
 /** View-only booking ledger row plus the quick "Arrived" toggle. */
-export function ReservationCard({ reservation, onToggleArrival }: ReservationCardProps) {
+export function ReservationCard({
+  reservation,
+  onToggleArrival,
+  readOnly = false,
+  branchLabel,
+}: ReservationCardProps) {
   const badge = reservationStatusBadge(reservation.status);
-  const target = arrivalTarget(reservation.status);
+  const target = readOnly ? null : arrivalTarget(reservation.status);
 
   return (
     <View style={styles.card} testID={`reservation_card_${reservation.id}`}>
       <View style={styles.headerRow}>
         <Text style={styles.time}>⏰ {reservation.reservationTime}</Text>
-        <View style={[styles.badge, { backgroundColor: badge.background }]}>
-          <Text style={[styles.badgeText, { color: badge.foreground }]}>{badge.label}</Text>
+        <View style={styles.headerPills}>
+          {branchLabel ? (
+            <View style={styles.pill}>
+              <Text style={styles.pillText}>{branchLabel}</Text>
+            </View>
+          ) : null}
+          <View style={[styles.badge, { backgroundColor: badge.background }]}>
+            <Text style={[styles.badgeText, { color: badge.foreground }]}>{badge.label}</Text>
+          </View>
         </View>
       </View>
 
@@ -56,6 +71,10 @@ export function ReservationCard({ reservation, onToggleArrival }: ReservationCar
           onPress={() => onToggleArrival(reservation.id, target)}
           testID={`btn_arrival_${reservation.id}`}
         />
+      ) : readOnly ? (
+        <Text style={styles.lockedNote}>
+          Owner view · status managed by the branch floor host
+        </Text>
       ) : (
         <Text style={styles.lockedNote}>View-only ledger entry · status managed by floor host</Text>
       )}
@@ -77,6 +96,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
+  },
+  headerPills: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   time: {
     flexShrink: 1,

@@ -80,6 +80,8 @@ export interface Reservation {
   guestCount: number;
   /** Formatted booking slot, e.g. "6:30 PM (In 20m)". */
   reservationTime: string;
+  /** Raw PocketBase timestamp, used for owner date-range aggregation. */
+  reservationAt?: string;
   tableNumber?: string;
   status: ReservationStatus;
   specialRequests?: string;
@@ -120,7 +122,7 @@ export interface Branch {
   isActive: boolean;
 }
 
-export type StaffRole = 'manager' | 'kitchen_lead' | 'floor_staff';
+export type StaffRole = 'owner' | 'manager' | 'kitchen_lead' | 'floor_staff';
 
 export type AlertToneId =
   | 'classic_chime'
@@ -139,6 +141,7 @@ export interface StaffSession {
   email: string;
   name: string;
   role: StaffRole;
+  /** Empty for owner accounts: they monitor every branch instead of one. */
   branchId: string;
   branchName: string;
 }

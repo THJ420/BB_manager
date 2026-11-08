@@ -16,6 +16,10 @@ export interface OrderCardProps {
   selected?: boolean;
   /** Recently arrived over SSE; the Orders Board clears this after a few seconds. */
   highlighted?: boolean;
+  /** Owner console: show the ticket without terminal actions. */
+  readOnly?: boolean;
+  /** Branch code shown on cross-branch (owner) boards. */
+  branchLabel?: string;
 }
 
 const ACTION_VARIANT: Record<'new' | 'preparing' | 'ready', ButtonVariant> = {
@@ -32,14 +36,19 @@ export function OrderCard({
   onSelect,
   selected,
   highlighted = false,
+  readOnly = false,
+  branchLabel,
 }: OrderCardProps) {
   const timing = orderTiming(order, now);
-  const action = orderAction(order.status);
+  const action = readOnly ? null : orderAction(order.status);
   const variant = action && order.status !== 'completed' && order.status !== 'cancelled'
     ? ACTION_VARIANT[order.status as 'new' | 'preparing' | 'ready']
     : 'primary';
   const canReject =
-    Boolean(onReject) && order.status !== 'completed' && order.status !== 'cancelled';
+    !readOnly &&
+    Boolean(onReject) &&
+    order.status !== 'completed' &&
+    order.status !== 'cancelled';
 
   const content = (
     <>
@@ -49,6 +58,11 @@ export function OrderCard({
           <View style={styles.pinPill}>
             <Text style={styles.pinText}>PIN {order.pickupCode}</Text>
           </View>
+          {branchLabel ? (
+            <View style={styles.pinPill}>
+              <Text style={styles.pinText}>{branchLabel}</Text>
+            </View>
+          ) : null}
         </View>
         <View style={styles.headerRight}>
           {highlighted ? (
@@ -115,7 +129,9 @@ export function OrderCard({
         </View>
       </View>
 
-      {action || canReject ? (
+      {readOnly ? (
+        <Text style={styles.readOnlyNote}>Owner view · read-only</Text>
+      ) : action || canReject ? (
         <View style={styles.actionRow}>
           {action ? (
             <ActionButton
@@ -241,6 +257,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontFamily: 'monospace',
     color: Colors.textSecondary,
+  },
+  readOnlyNote: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
   },
   metaRow: {
     flexDirection: 'row',
