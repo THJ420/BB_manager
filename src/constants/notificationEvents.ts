@@ -181,8 +181,8 @@ export const NOTIFICATION_EVENT_CATEGORIES: NotificationEventCategory[] = [
     events: [
       {
         key: 'system.sync.pocketbase_error',
-        label: 'PocketBase sync failure',
-        description: 'A push or webhook to PocketBase failed.',
+        label: 'Cloud sync failure',
+        description: 'A cloud sync or webhook failed.',
       },
       {
         key: 'system.smtp.test_failed',

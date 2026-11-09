@@ -23,6 +23,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
 
 # A newer push supersedes an in-flight APK build.
 concurrency:
@@ -30,7 +32,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-apk:
@@ -152,6 +154,19 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Verify release tag matches app version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_VERSION="$(node -p "require('./package.json').version")"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          echo "package.json: $APP_VERSION | tag: $TAG_VERSION"
+          if [ "$APP_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::Release tag $GITHUB_REF_NAME does not match package.json version $APP_VERSION"
+            exit 1
+          fi
 
       - name: Verify live PocketBase configuration
         shell: bash
@@ -313,11 +328,24 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: BB Manager ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          files: build/*.apk
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+
   # Queue a managed EAS cloud build. Expo's builders compile the APK, so this
   # job never runs Gradle/Metro on a runner and cannot hit a local build timeout.
   # eas.json exports EXPO_PUBLIC_POCKETBASE_URL to the EAS build environment.
   eas-cloud-preview:
     name: Queue EAS cloud preview APK
+    # Tag releases are served by the build-apk job above; a second cloud build
+    # would only duplicate the artifact and slow the release.
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:

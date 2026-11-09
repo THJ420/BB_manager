@@ -4,9 +4,9 @@ import { Colors, Radius } from '../theme/colors';
 import { ConnectionStatus } from '../types';
 
 const STATUS_META: Record<ConnectionStatus, { label: string; color: string; background: string }> = {
-  live: { label: 'SSE LIVE', color: Colors.success, background: Colors.successMuted },
-  polling: { label: 'POLLING', color: Colors.warning, background: Colors.warningMuted },
-  offline: { label: 'OFFLINE QUEUED', color: Colors.error, background: Colors.errorMuted },
+  live: { label: 'ONLINE', color: Colors.success, background: Colors.successMuted },
+  polling: { label: 'SYNCING', color: Colors.warning, background: Colors.warningMuted },
+  offline: { label: 'OFFLINE', color: Colors.error, background: Colors.errorMuted },
 };
 
 export interface ConnectionBadgeProps {

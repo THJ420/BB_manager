@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BRANCHES } from '../constants/branches';
 import { normalizeStaffRole } from '../lib/settings';
 import { nameFromEmail } from '../lib/format';
-import { branchCodesMatch, normalizeBranchCode } from '../lib/branchCodes';
+import { normalizeBranchCode } from '../lib/branchCodes';
 import { Branch, StaffRole, StaffSession } from '../types';
 import { pb, isPocketBaseConfigured } from './pocketbase';
 import { COLLECTIONS } from './collections';
@@ -15,10 +15,9 @@ const BRANCH_KEY = 'bb_active_branch_id';
 const DEMO_BRANCH_ID = 'branch_dt_01';
 
 export interface LoginInput {
-  email: string;
+  /** PocketBase username (`edk-mosina`) or email. */
+  username: string;
   password: string;
-  /** Required for branch terminals; omitted for owner (all-branch) logins. */
-  branchCode?: string;
 }
 
 const OWNER_BRANCH_NAME = 'All Branches';
@@ -58,14 +57,13 @@ function resolveDemoRole(email: string): StaffRole {
   return 'floor_staff';
 }
 
-function localSession(input: LoginInput): StaffSession {
-  const branchCode = input.branchCode ?? '';
-  const branch = findBranchByCode(branchCode) ?? (BRANCHES[0] as Branch);
+function localSession(username: string): StaffSession {
+  const branch = BRANCHES[0] as Branch;
   return {
     id: `usr_${Date.now() % 10_000}`,
-    email: input.email.trim(),
-    name: nameFromEmail(input.email.trim()),
-    role: resolveDemoRole(input.email),
+    email: username.trim(),
+    name: nameFromEmail(username.trim()),
+    role: resolveDemoRole(username),
     branchId: branch.id,
     branchName: branch.name,
   };
@@ -117,71 +115,52 @@ export async function restoreSession(): Promise<StaffSession | null> {
   }
 }
 
-async function resolveLiveBranch(
-  branchId: string,
-  branchCode: string,
-  email: string
-): Promise<Branch> {
+async function resolveLiveBranch(branchId: string): Promise<Branch> {
   try {
     const record = await pb.collection(COLLECTIONS.branches).getOne(branchId);
-    const branch = mapBranchRecord(record);
-    // Match the printed code against PocketBase's `branches.code` after
-    // normalising case, whitespace, hyphens, underscores and dots.
-    if (branch.code && !branchCodesMatch(branch.code, branchCode)) {
-      throw new Error(
-        `The entered branch code "${branchCode}" does not match this staff account's assigned branch (${branch.code}).`
-      );
-    }
-    return branch;
+    return mapBranchRecord(record);
   } catch (error) {
     if (isNotFoundError(error)) {
       throw new Error('The assigned restaurant branch no longer exists.');
-    }
-    if (
-      error instanceof Error &&
-      error.message.startsWith('The entered branch code')
-    ) {
-      throw error;
     }
     throw new Error('Unable to load the assigned restaurant branch.');
   }
 }
 
+/**
+ * Single credential entry point: the PocketBase staff record decides whether
+ * the session is an owner console or a branch terminal. No branch code is
+ * requested from the user.
+ */
 export async function loginStaff(input: LoginInput): Promise<StaffSession> {
-  const email = input.email.trim();
-  const branchCode = (input.branchCode ?? '').trim();
+  const username = input.username.trim();
 
-  if (!email || !input.password.trim()) {
-    throw new Error('Please enter both email and password.');
+  if (!username || !input.password.trim()) {
+    throw new Error('Please enter both username and password.');
   }
 
   if (isPocketBaseConfigured) {
     try {
       const auth = await pb
         .collection(COLLECTIONS.staffUsers)
-        .authWithPassword(email, input.password);
+        .authWithPassword(username, input.password);
       const role = normalizeStaffRole(
         auth.record.role,
-        resolveDemoRole(String(auth.record.role ?? email))
+        resolveDemoRole(String(auth.record.role ?? username))
       );
       const branchId = firstRelationId(auth.record.branch_id);
 
       // Owners are not tied to a branch: they load the cross-branch dashboard
       // and never trigger terminal ringing.
       if (role === 'owner') {
-        if (branchCode) {
-          throw new Error(
-            'Owner accounts monitor every branch — leave the branch code blank.'
-          );
-        }
         rememberAssignedBranchId('');
         const ownerSession: StaffSession = {
           id: auth.record.id,
-          email: auth.record.email || email,
+          email: auth.record.email || username,
           name:
             typeof auth.record.name === 'string' && auth.record.name
               ? auth.record.name
-              : nameFromEmail(email),
+              : nameFromEmail(auth.record.email || username),
           role: 'owner',
           branchId: '',
           branchName: OWNER_BRANCH_NAME,
@@ -190,24 +169,20 @@ export async function loginStaff(input: LoginInput): Promise<StaffSession> {
         return ownerSession;
       }
 
-      if (!branchCode) {
-        pb.authStore.clear();
-        throw new Error('Branch Code is required for local pickup routing.');
-      }
       if (!branchId) {
         pb.authStore.clear();
-        throw new Error('Staff account is not assigned to a restaurant branch.');
+        throw new Error('This account is not assigned to a restaurant.');
       }
 
-      const branch = await resolveLiveBranch(branchId, branchCode, email);
+      const branch = await resolveLiveBranch(branchId);
       rememberAssignedBranchId(branchId);
       const session: StaffSession = {
         id: auth.record.id,
-        email: auth.record.email || email,
+        email: auth.record.email || username,
         name:
           typeof auth.record.name === 'string' && auth.record.name
             ? auth.record.name
-            : nameFromEmail(email),
+            : nameFromEmail(auth.record.email || username),
         role,
         branchId,
         branchName: branch.name,
@@ -218,10 +193,7 @@ export async function loginStaff(input: LoginInput): Promise<StaffSession> {
       pb.authStore.clear();
       if (error instanceof Error && error.message) {
         if (
-          error.message.startsWith('The entered branch code') ||
-          error.message.startsWith('Owner accounts monitor every branch') ||
-          error.message === 'Branch Code is required for local pickup routing.' ||
-          error.message === 'Staff account is not assigned to a restaurant branch.' ||
+          error.message === 'This account is not assigned to a restaurant.' ||
           error.message === 'The assigned restaurant branch no longer exists.' ||
           error.message === 'Unable to load the assigned restaurant branch.'
         ) {
@@ -232,21 +204,7 @@ export async function loginStaff(input: LoginInput): Promise<StaffSession> {
     }
   }
 
-  if (!branchCode) {
-    throw new Error(
-      'Branch Code is required for local pickup routing in demo mode.'
-    );
-  }
-
-  const matchedBranch = findBranchByCode(branchCode);
-  if (!matchedBranch) {
-    const demoCodes = BRANCHES.map((branch) => branch.code).join(', ');
-    throw new Error(
-      `Unknown branch code "${branchCode}". This build is using the local demo data set because EXPO_PUBLIC_POCKETBASE_URL is not configured, so only ${demoCodes} are available. Install a live build to sign in with PocketBase staff accounts.`
-    );
-  }
-
-  const session = localSession({ ...input, email, branchCode });
+  const session = localSession(username);
   await persistSession(session);
   return session;
 }

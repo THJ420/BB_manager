@@ -28,9 +28,9 @@ export function isDuplicateRecordError(error: unknown): boolean {
 export function publicNetworkError(error: unknown): string {
   const status = errorStatus(error);
   if (status === 400 || status === 401 || status === 403) {
-    return 'Invalid staff credentials or this account cannot access the selected branch.';
+    return 'Incorrect username or password.';
   }
-  return 'PocketBase is unreachable. Check the network connection and try again.';
+  return 'Unable to reach the service. Check your connection and try again.';
 }
 
 export type PocketBaseErrorKind =

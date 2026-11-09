@@ -58,6 +58,7 @@ import { describeSyncHint } from '../services/errors';
 import { runNetworkProbe, NetworkProbeResult } from '../services/networkProbe';
 import { fetchBranchSnapshot, fetchOwnerSnapshot, BranchSnapshot } from '../services/data';
 import { IncomingOrderCallModal } from '../components/IncomingOrderCallModal';
+import { AppUpdatePrompt } from '../components/AppUpdatePrompt';
 import { RejectOrderModal } from '../components/RejectOrderModal';
 import {
   Branch,
@@ -77,6 +78,7 @@ import {
 export interface LoginResult {
   ok: boolean;
   error?: string;
+  role?: StaffSession['role'];
 }
 
 export interface SyncDiagnosticsReport {
@@ -108,7 +110,7 @@ interface AppContextValue {
   isLiveBackend: boolean;
   /** True for the cross-branch owner console; terminal alerts stay muted. */
   isOwner: boolean;
-  login: (email: string, password: string, branchCode: string) => Promise<LoginResult>;
+  login: (username: string, password: string) => Promise<LoginResult>;
   logout: () => Promise<void>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
   rejectOrder: (orderId: string, reason: string) => Promise<void>;
@@ -727,9 +729,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const login = useCallback(
-    async (email: string, password: string, branchCode: string): Promise<LoginResult> => {
+    async (username: string, password: string): Promise<LoginResult> => {
       try {
-        const session = await loginStaff({ email, password, branchCode });
+        const session = await loginStaff({ username, password });
         if (session.role === 'owner') {
           setIncomingCalls([]);
           setRejectingOrder(null);
@@ -746,7 +748,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 settings
               );
         dispatch({ type: 'LOGIN', session, branch });
-        return { ok: true };
+        return { ok: true, role: session.role };
       } catch (error) {
         return {
           ok: false,
@@ -1524,6 +1526,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <AppContext.Provider value={value}>
       {children}
+      <AppUpdatePrompt />
       {isOwner ? null : (
         <IncomingOrderCallModal
           order={rejectingOrder ? null : activeIncomingCall}

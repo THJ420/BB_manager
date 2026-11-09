@@ -42,13 +42,15 @@ module.exports = {
   expo: {
     name: 'BB Manager',
     slug: 'bb-manager',
-    version: '1.3.0',
+    version: '1.4.0',
     orientation: 'default',
     scheme: 'bbmanager',
     userInterfaceStyle: 'dark',
     backgroundColor: '#121212',
+    icon: './assets/icon.png',
     newArchEnabled: true,
     splash: {
+      image: './assets/splash-icon.png',
       resizeMode: 'contain',
       backgroundColor: '#121212',
     },
@@ -64,6 +66,10 @@ module.exports = {
     android: {
       package: 'com.bbmanager.app',
       edgeToEdgeEnabled: true,
+      adaptiveIcon: {
+        foregroundImage: './assets/adaptive-icon.png',
+        backgroundColor: '#121212',
+      },
       permissions: [
         'android.permission.INTERNET',
         'android.permission.CAMERA',
@@ -72,11 +78,14 @@ module.exports = {
         'android.permission.VIBRATE',
         'android.permission.WAKE_LOCK',
         'android.permission.RECEIVE_BOOT_COMPLETED',
+        // Required to launch the APK installer for in-app GitHub updates.
+        'android.permission.REQUEST_INSTALL_PACKAGES',
       ],
     },
     web: {
       bundler: 'metro',
       output: 'single',
+      favicon: './assets/favicon.png',
     },
     plugins: [
       'expo-router',
@@ -127,6 +136,8 @@ module.exports = {
         },
       },
       pocketbaseUrl,
+      // Public release feed used by the in-app updater.
+      githubRepo: 'THJ420/BB_manager',
       // Useful when diagnosing a build that unexpectedly boots into demo mode.
       pocketbaseUrlSource: isDemoRequested
         ? 'demo'

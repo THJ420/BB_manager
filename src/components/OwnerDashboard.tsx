@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useRouter } from 'expo-router';
 import {
   Pressable,
   RefreshControl,
@@ -41,7 +42,8 @@ function reservationTimestamp(reservation: Reservation): number {
 }
 
 export function OwnerDashboard() {
-  const { state, refreshData } = useApp();
+  const router = useRouter();
+  const { state, refreshData, logout } = useApp();
   const now = useNow(60_000);
   const { refreshing, onRefresh } = usePullToRefresh(refreshData);
   const [rangePreset, setRangePreset] = useState<AnalyticsRangePreset>('today');
@@ -330,7 +332,7 @@ export function OwnerDashboard() {
 
           {branchRows.length === 0 ? (
             <Text style={styles.emptyText}>
-              No branches returned by PocketBase for this owner account.
+              No branches are available for this account yet.
             </Text>
           ) : null}
         </View>
@@ -344,6 +346,16 @@ export function OwnerDashboard() {
             testID="btn_owner_clear_branch"
           />
         ) : null}
+
+        <ActionButton
+          label="SIGN OUT"
+          variant="dangerOutline"
+          fullWidth
+          onPress={() => {
+            void logout().then(() => router.replace('/login'));
+          }}
+          testID="btn_owner_logout"
+        />
       </ScrollView>
 
       <AnalyticsDateRangeModal

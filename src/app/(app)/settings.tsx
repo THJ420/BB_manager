@@ -1,4 +1,5 @@
 import { Redirect, useRouter } from 'expo-router';
+import Constants from 'expo-constants';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -32,8 +33,8 @@ import {
 } from '../../types';
 
 const CONNECTION_MODES: Array<{ id: ConnectionStatus; label: string }> = [
-  { id: 'live', label: 'SSE LIVE' },
-  { id: 'polling', label: 'POLL' },
+  { id: 'live', label: 'ONLINE' },
+  { id: 'polling', label: 'SYNCING' },
   { id: 'offline', label: 'OFFLINE' },
 ];
 
@@ -471,8 +472,7 @@ export default function TerminalSettingsScreen() {
             style={styles.diagnosticsButton}
           />
           <Text style={styles.rowSubtitle}>
-            Force-flushes the queue and prints the endpoint, auth state, role, branch and
-            the exact PocketBase rejection to the console.
+            Force-flushes the queue and prints the failure details to the console.
           </Text>
 
           <ActionButton
@@ -983,14 +983,8 @@ export default function TerminalSettingsScreen() {
             }
           />
 
-          <TextField
-            label="PocketBase Branch ID"
-            value={draft.pocketbaseBranchId}
-            onChangeText={(pocketbaseBranchId) =>
-              setDraft((current) => ({ ...current, pocketbaseBranchId }))
-            }
-            autoCapitalize="none"
-          />
+          <Text style={styles.subLabel}>BRANCH CODE</Text>
+          <Text style={styles.rowSubtitle}>{state.activeBranch.code}</Text>
 
           <View style={styles.divider} />
 
@@ -1100,7 +1094,7 @@ export default function TerminalSettingsScreen() {
         />
 
         <Text style={styles.version}>
-          BB Manager v1.2.0 • Store Operations Engine • PocketBase SSE Synchronized
+          BB Manager v{Constants.expoConfig?.version ?? '1.4.0'} · Store Operations Engine
         </Text>
       </ScrollView>
 
@@ -1157,33 +1151,23 @@ export default function TerminalSettingsScreen() {
       <DialogModal
         visible={diagnosticsVisible}
         title="Sync Diagnostics"
-        message="Exact PocketBase response for the queued actions"
+        message="Server response for the queued actions"
         onRequestClose={() => setDiagnosticsVisible(false)}
         actions={[{ label: 'Close', onPress: () => setDiagnosticsVisible(false) }]}
       >
         {diagnostics ? (
           <View style={styles.diagnosticsBody}>
-            <Text style={styles.diagLine}>Endpoint: {diagnostics.pocketbase.url}</Text>
             <Text style={styles.diagLine}>
-              Auth: {diagnostics.pocketbase.authValid ? 'valid' : 'EXPIRED'}
-              {diagnostics.pocketbase.tokenExpiresAt
-                ? ` (expires ${diagnostics.pocketbase.tokenExpiresAt})`
-                : ''}
+              Account: {diagnostics.pocketbase.role || 'staff'}
             </Text>
             <Text style={styles.diagLine}>
-              Staff: {diagnostics.pocketbase.email || '(none)'} • role{' '}
-              {diagnostics.pocketbase.role || '(none)'}
-            </Text>
-            <Text style={styles.diagLine}>
-              Branch: {diagnostics.pocketbase.branchId || '(none)'}
-            </Text>
-            <Text style={styles.diagLine}>
-              Raw fetch health:{' '}
+              Network health:{' '}
               {diagnostics.network.checks.find((check) => check.id === 'raw-health')?.status ||
-                'no response'}{' '}
-              ({diagnostics.network.platform})
+                'no response'}
             </Text>
-            <Text style={styles.diagLine}>{diagnostics.network.verdict}</Text>
+            <Text style={styles.diagLine}>
+              {diagnostics.network.verdict.replace(/PocketBase/gi, 'service')}
+            </Text>
             <Text style={styles.diagLine}>
               Queue: {diagnostics.queue.pending} pending • {diagnostics.result.synced} synced /{' '}
               {diagnostics.result.failed} rejected
