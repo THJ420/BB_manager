@@ -25,9 +25,12 @@ export interface UpdateCheck {
   available: boolean;
   currentVersion: string;
   release: ReleaseInfo | null;
+  /** Set when the check itself failed, so manual checks can report it. */
+  error: string | null;
 }
 
 const DEFAULT_REPO = 'THJ420/BB_manager';
+const APK_ASSET_NAME = 'bb-manager-preview.apk';
 
 function releaseRepo(): string {
   const extra = Constants.expoConfig?.extra as { githubRepo?: unknown } | undefined;
@@ -49,17 +52,24 @@ export async function checkForUpdate(): Promise<UpdateCheck> {
       { headers: { Accept: 'application/vnd.github+json' } }
     );
     if (!response.ok) {
-      return { available: false, currentVersion, release: null };
+      return {
+        available: false,
+        currentVersion,
+        release: null,
+        error: `GitHub returned HTTP ${response.status}. Try again in a moment.`,
+      };
     }
 
     const data = (await response.json()) as Record<string, unknown>;
     const tag = String(data.tag_name ?? data.name ?? '').trim();
     const version = tag.replace(/^v/i, '');
     const assets = Array.isArray(data.assets) ? data.assets : [];
-    const apk = assets.find((asset) => {
-      const record = asset as Record<string, unknown>;
-      return /\.apk$/i.test(String(record.name ?? ''));
-    }) as Record<string, unknown> | undefined;
+    const apkRecords = assets
+      .map((asset) => asset as Record<string, unknown>)
+      .filter((record) => /\.apk$/i.test(String(record.name ?? '')));
+    const apk =
+      apkRecords.find((record) => String(record.name) === APK_ASSET_NAME) ??
+      apkRecords[0];
 
     const release: ReleaseInfo = {
       version,
@@ -74,10 +84,15 @@ export async function checkForUpdate(): Promise<UpdateCheck> {
       available: version ? isNewerVersion(version, currentVersion) : false,
       currentVersion,
       release,
+      error: null,
     };
   } catch {
-    // Offline or rate-limited checks are silent; the terminal stays usable.
-    return { available: false, currentVersion, release: null };
+    return {
+      available: false,
+      currentVersion,
+      release: null,
+      error: 'Could not reach GitHub. Check the network connection and try again.',
+    };
   }
 }
 

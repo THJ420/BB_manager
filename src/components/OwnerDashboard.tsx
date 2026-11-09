@@ -14,6 +14,7 @@ import { AnalyticsDateRangeModal } from './AnalyticsDateRangeModal';
 import { HorizontalFilterChips } from './HorizontalFilterChips';
 import { MetricCard } from './MetricCard';
 import { ScreenHeader } from './ScreenHeader';
+import { UpdateCheckButton } from './UpdateCheckButton';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import { useNow } from '../hooks/useNow';
 import {
@@ -343,6 +344,13 @@ export function OwnerDashboard() {
             testID="btn_owner_clear_branch"
           />
         ) : null}
+
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.sectionLabel}>SYSTEM INFO</Text>
+          </View>
+          <UpdateCheckButton />
+        </View>
 
         <ActionButton
           label="SIGN OUT"

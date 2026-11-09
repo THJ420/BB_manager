@@ -1,5 +1,4 @@
 import { Redirect, useRouter } from 'expo-router';
-import Constants from 'expo-constants';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,12 +10,14 @@ import { ScreenHeader } from '../../components/ScreenHeader';
 import { SectionCard } from '../../components/SectionCard';
 import { SwitchRow } from '../../components/SwitchRow';
 import { TextField } from '../../components/TextField';
+import { UpdateCheckButton } from '../../components/UpdateCheckButton';
 import { WeeklyHoursModal } from '../../components/WeeklyHoursModal';
 import { BRANCHES } from '../../constants/branches';
 import { NOTIFICATION_EVENT_CATEGORIES } from '../../constants/notificationEvents';
 import { getAlertTone } from '../../lib/alertTones';
 import { storeHoursSummary } from '../../lib/domain';
 import { initials, roleLabel } from '../../lib/format';
+import { currentAppVersion } from '../../services/updater';
 import { useApp } from '../../state/AppProvider';
 import type { SyncDiagnosticsReport } from '../../state/AppProvider';
 import { Colors, Radius, Spacing } from '../../theme/colors';
@@ -1093,9 +1094,12 @@ export default function TerminalSettingsScreen() {
           testID="btn_logout"
         />
 
-        <Text style={styles.version}>
-          BB Manager v{Constants.expoConfig?.version ?? '1.4.0'} · Store Operations Engine
-        </Text>
+        <SectionCard title="SYSTEM INFO">
+          <Text style={styles.version}>
+            BB Manager v{currentAppVersion()} · Store Operations Engine
+          </Text>
+          <UpdateCheckButton />
+        </SectionCard>
       </ScrollView>
 
       <View style={styles.saveBar}>

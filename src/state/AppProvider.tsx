@@ -61,6 +61,7 @@ import { fetchBranchSnapshot, fetchOwnerSnapshot, BranchSnapshot } from '../serv
 import { IncomingOrderCallModal } from '../components/IncomingOrderCallModal';
 import { AppUpdatePrompt } from '../components/AppUpdatePrompt';
 import { RejectOrderModal } from '../components/RejectOrderModal';
+import { checkForUpdate, ReleaseInfo, UpdateCheck } from '../services/updater';
 import {
   Branch,
   ConnectionStatus,
@@ -144,6 +145,9 @@ interface AppContextValue {
   runSyncDiagnostics: () => Promise<SyncDiagnosticsReport>;
   setConnectionStatus: (status: ConnectionStatus) => void;
   setBranch: (branch: Branch) => Promise<void>;
+  /** Manual "Check for Updates": opens the prompt immediately when newer. */
+  checkForAppUpdate: () => Promise<UpdateCheck>;
+  checkingAppUpdate: boolean;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -216,6 +220,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [realtimeEpoch, setRealtimeEpoch] = useState(0);
   const [incomingCalls, setIncomingCalls] = useState<Order[]>([]);
   const [rejectingOrder, setRejectingOrder] = useState<Order | null>(null);
+  const [updateRelease, setUpdateRelease] = useState<ReleaseInfo | null>(null);
+  const [updatePromptVisible, setUpdatePromptVisible] = useState(false);
+  const [checkingAppUpdate, setCheckingAppUpdate] = useState(false);
+  const updateCheckPromiseRef = useRef<Promise<UpdateCheck> | null>(null);
   const activeIncomingCall = incomingCalls[0] ?? null;
   const isOwner = state.session?.role === 'owner';
   const ownerWorkspaceBranchId = state.ownerWorkspaceBranchId;
@@ -1592,6 +1600,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [applyBranchSnapshot]
   );
 
+  const checkForAppUpdate = useCallback((): Promise<UpdateCheck> => {
+    if (!updateCheckPromiseRef.current) {
+      setCheckingAppUpdate(true);
+      updateCheckPromiseRef.current = checkForUpdate()
+        .then((result) => {
+          if (result.available && result.release) {
+            setUpdateRelease(result.release);
+            setUpdatePromptVisible(true);
+          }
+          return result;
+        })
+        .finally(() => {
+          updateCheckPromiseRef.current = null;
+          setCheckingAppUpdate(false);
+        });
+    }
+    return updateCheckPromiseRef.current;
+  }, []);
+
+  // Aggressive launch check: silent when offline, modal as soon as a newer
+  // GitHub release is detected.
+  useEffect(() => {
+    void checkForAppUpdate();
+  }, [checkForAppUpdate]);
+
   const value = useMemo<AppContextValue>(
     () => ({
       state,
@@ -1623,6 +1656,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       runSyncDiagnostics,
       setConnectionStatus,
       setBranch,
+      checkForAppUpdate,
+      checkingAppUpdate,
     }),
     [
       state,
@@ -1653,13 +1688,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       runSyncDiagnostics,
       setConnectionStatus,
       setBranch,
+      checkForAppUpdate,
+      checkingAppUpdate,
     ]
   );
 
   return (
     <AppContext.Provider value={value}>
       {children}
-      <AppUpdatePrompt />
+      <AppUpdatePrompt
+        release={updateRelease}
+        visible={updatePromptVisible}
+        onDismiss={() => setUpdatePromptVisible(false)}
+      />
       {isOwner ? null : (
         <IncomingOrderCallModal
           order={rejectingOrder ? null : activeIncomingCall}

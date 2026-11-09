@@ -42,7 +42,7 @@ module.exports = {
   expo: {
     name: 'BB Manager',
     slug: 'bb-manager',
-    version: '1.4.1',
+    version: '1.4.2',
     orientation: 'default',
     scheme: 'bbmanager',
     userInterfaceStyle: 'dark',

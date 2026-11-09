@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -10,41 +10,32 @@ import {
 } from 'react-native';
 import { Colors, Radius, Spacing } from '../theme/colors';
 import {
-  checkForUpdate,
   currentAppVersion,
   downloadAndInstallUpdate,
   ReleaseInfo,
 } from '../services/updater';
 
+interface AppUpdatePromptProps {
+  release: ReleaseInfo | null;
+  visible: boolean;
+  onDismiss: () => void;
+}
+
 /**
- * Startup update prompt for the public GitHub release feed. The check is silent
- * when offline so the terminal never blocks on it.
+ * High-priority update prompt for the public GitHub release feed. Shown
+ * automatically on launch and immediately after a manual "Check for Updates".
  */
-export function AppUpdatePrompt() {
-  const checked = useRef(false);
-  const [release, setRelease] = useState<ReleaseInfo | null>(null);
-  const [visible, setVisible] = useState(false);
+export function AppUpdatePrompt({ release, visible, onDismiss }: AppUpdatePromptProps) {
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (checked.current) return;
-    checked.current = true;
-
-    void checkForUpdate().then((result) => {
-      if (!result.available || !result.release) return;
-      setRelease(result.release);
-      setVisible(true);
-    });
-  }, []);
-
   const handleInstall = async () => {
-    if (!release) return;
+    if (!release || downloading) return;
     setDownloading(true);
     setError(null);
     try {
       await downloadAndInstallUpdate(release);
-      setVisible(false);
+      onDismiss();
     } catch (installError) {
       setError(
         installError instanceof Error
@@ -63,7 +54,10 @@ export function AppUpdatePrompt() {
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={() => setVisible(false)}
+      statusBarTranslucent
+      onRequestClose={() => {
+        if (!downloading) onDismiss();
+      }}
     >
       <View style={styles.backdrop}>
         <View style={styles.card} accessibilityViewIsModal>
@@ -71,10 +65,12 @@ export function AppUpdatePrompt() {
             <Text style={styles.badgeText}>UPDATE AVAILABLE</Text>
           </View>
 
-          <Text style={styles.title}>BB Manager {release.version}</Text>
+          <Text style={styles.title}>
+            New Version Available (v{release.version})
+          </Text>
           <Text style={styles.subtitle}>
-            You are running v{currentAppVersion()}. Install the latest release to
-            get the newest fixes.
+            You are running v{currentAppVersion()}. Update now to get the latest
+            fixes and features.
           </Text>
 
           {release.notes ? (
@@ -97,14 +93,17 @@ export function AppUpdatePrompt() {
             testID="btn_update_install"
           >
             {downloading ? (
-              <ActivityIndicator color={Colors.white} />
+              <View style={styles.downloadingRow}>
+                <ActivityIndicator color={Colors.white} />
+                <Text style={styles.primaryText}>DOWNLOADING…</Text>
+              </View>
             ) : (
-              <Text style={styles.primaryText}>DOWNLOAD & INSTALL</Text>
+              <Text style={styles.primaryText}>UPDATE NOW</Text>
             )}
           </Pressable>
 
           <Pressable
-            onPress={() => setVisible(false)}
+            onPress={onDismiss}
             disabled={downloading}
             accessibilityRole="button"
             style={styles.secondaryButton}
@@ -132,7 +131,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: Radius.xl,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.primaryBorder,
     padding: Spacing.lg,
     gap: 12,
   },
@@ -180,14 +179,19 @@ const styles = StyleSheet.create({
     color: Colors.error,
   },
   primaryButton: {
-    minHeight: 50,
+    minHeight: 56,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: Radius.md,
     backgroundColor: Colors.primary,
   },
+  downloadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   primaryText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '900',
     letterSpacing: 0.8,
     color: Colors.white,
