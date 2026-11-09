@@ -43,7 +43,7 @@ function reservationTimestamp(reservation: Reservation): number {
 
 export function OwnerDashboard() {
   const router = useRouter();
-  const { state, refreshData, logout } = useApp();
+  const { state, refreshData, logout, enterOwnerBranch } = useApp();
   const now = useNow(60_000);
   const { refreshing, onRefresh } = usePullToRefresh(refreshData);
   const [rangePreset, setRangePreset] = useState<AnalyticsRangePreset>('today');
@@ -277,7 +277,7 @@ export function OwnerDashboard() {
           <View style={styles.cardHeaderRow}>
             <Text style={styles.sectionLabel}>BRANCH LEADERBOARD</Text>
             <Text style={styles.cardMeta}>
-              {branchFilter === 'all' ? 'TAP A BRANCH TO DRILL DOWN' : 'DRILLED DOWN'}
+              {branchFilter === 'all' ? 'TAP A BRANCH TO MANAGE' : 'DRILLED DOWN'}
             </Text>
           </View>
 
@@ -293,12 +293,9 @@ export function OwnerDashboard() {
             return (
               <Pressable
                 key={row.branch.id}
-                onPress={() =>
-                  setBranchFilter(selected ? 'all' : row.branch.id)
-                }
+                onPress={() => void enterOwnerBranch(row.branch)}
                 accessibilityRole="button"
-                accessibilityState={{ selected }}
-                accessibilityLabel={`${row.branch.name}, ${row.orders} orders, ${formatCurrency(
+                accessibilityLabel={`Open ${row.branch.name} management, ${row.orders} orders, ${formatCurrency(
                   row.revenue
                 )} revenue`}
                 testID={`owner_branch_${row.branch.code || row.branch.id}`}

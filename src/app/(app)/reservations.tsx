@@ -16,7 +16,7 @@ import { Colors, Radius, Spacing } from '../../theme/colors';
 
 export default function ReservationsScreen() {
   const router = useRouter();
-  const { state, updateReservationStatus, isOwner } = useApp();
+  const { state, updateReservationStatus, isOwner, isOwnerWorkspace } = useApp();
   const [selectedFilter, setSelectedFilter] = useState<ReservationFilter>('all');
 
   const filterOptions = useMemo(
@@ -43,7 +43,7 @@ export default function ReservationsScreen() {
       <ScreenHeader
         title="Guest Reservations"
         subtitle={
-          isOwner
+          isOwner && !isOwnerWorkspace
             ? 'All Branches • Cross-store booking ledger'
             : `${state.activeBranch.name} • Bookings & arrival dispatch`
         }
@@ -74,8 +74,12 @@ export default function ReservationsScreen() {
         renderItem={({ item }) => (
           <ReservationCard
             reservation={item}
-            readOnly={isOwner}
-            branchLabel={isOwner ? branchCodes.get(item.branchId) : undefined}
+            readOnly={isOwner && !isOwnerWorkspace}
+            branchLabel={
+              isOwner && !isOwnerWorkspace
+                ? branchCodes.get(item.branchId)
+                : undefined
+            }
             onToggleArrival={(reservationId, status) =>
               void updateReservationStatus(reservationId, status)
             }

@@ -84,8 +84,8 @@ export default function MenuStockScreen() {
     setEditorVisible(true);
   };
 
-  // Owner accounts are not branch-scoped; menu edits belong to a terminal.
-  if (state.session?.role === 'owner') {
+  // Owners manage menus inside a branch workspace, never from the network view.
+  if (state.session?.role === 'owner' && !state.ownerWorkspaceBranchId) {
     return <Redirect href="/(app)/analytics" />;
   }
 

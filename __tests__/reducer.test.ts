@@ -329,4 +329,29 @@ describe('appReducer', () => {
       'Store closing soon / outside operating hours'
     );
   });
+
+  it('tracks and clears the owner branch workspace', () => {
+    const ownerSession = {
+      id: 'usr_owner',
+      email: 'owner@example.com',
+      name: 'Owner',
+      role: 'owner' as const,
+      branchId: '',
+      branchName: 'All Branches',
+    };
+    const entered = appReducer(
+      { ...hydratedState(), session: ownerSession },
+      { type: 'SET_OWNER_WORKSPACE', branchId: 'branch_cc_poznan' }
+    );
+    expect(entered.ownerWorkspaceBranchId).toBe('branch_cc_poznan');
+
+    const exited = appReducer(entered, {
+      type: 'SET_OWNER_WORKSPACE',
+      branchId: null,
+    });
+    expect(exited.ownerWorkspaceBranchId).toBeNull();
+
+    const loggedOut = appReducer(entered, { type: 'LOGOUT' });
+    expect(loggedOut.ownerWorkspaceBranchId).toBeNull();
+  });
 });

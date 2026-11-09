@@ -21,6 +21,8 @@ export interface AppState {
   session: StaffSession | null;
   activeBranch: Branch;
   branches: Branch[];
+  /** Owner-only: branch currently opened from the command center, else null. */
+  ownerWorkspaceBranchId: string | null;
   connection: ConnectionStatus;
   orders: Order[];
   /** Read-only one-year ledger used by Floor Analytics. */
@@ -52,6 +54,7 @@ export type AppAction =
   | { type: 'HYDRATE'; payload: HydratePayload }
   | { type: 'LOGIN'; session: StaffSession; branch: Branch }
   | { type: 'LOGOUT' }
+  | { type: 'SET_OWNER_WORKSPACE'; branchId: string | null }
   | { type: 'SET_BRANCH'; branch: Branch }
   | { type: 'SET_BRANCHES'; branches: Branch[] }
   | {
@@ -92,6 +95,7 @@ export const initialAppState: AppState = {
   session: null,
   activeBranch: activeBranch(),
   branches: BRANCHES,
+  ownerWorkspaceBranchId: null,
   connection: 'live',
   orders: [],
   analyticsHistory: [],
@@ -111,6 +115,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         ...action.payload,
         branches: action.payload.branches ?? state.branches,
+        ownerWorkspaceBranchId: null,
         hydrated: true,
       };
 
@@ -119,6 +124,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         session: action.session,
         activeBranch: action.branch,
+        ownerWorkspaceBranchId: null,
         settings: {
           ...state.settings,
           branchName: action.branch.name,
@@ -127,7 +133,13 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
 
     case 'LOGOUT':
-      return { ...state, session: null };
+      return { ...state, session: null, ownerWorkspaceBranchId: null };
+
+    case 'SET_OWNER_WORKSPACE':
+      return {
+        ...state,
+        ownerWorkspaceBranchId: action.branchId,
+      };
 
     case 'SET_BRANCH':
       return {

@@ -305,8 +305,8 @@ export default function TerminalSettingsScreen() {
     [pendingCount]
   );
 
-  // Branch settings require a branch; the owner console is aggregate-only.
-  if (state.session?.role === 'owner') {
+  // Branch settings require a branch; owners reach them via the workspace.
+  if (state.session?.role === 'owner' && !state.ownerWorkspaceBranchId) {
     return <Redirect href="/(app)/analytics" />;
   }
 

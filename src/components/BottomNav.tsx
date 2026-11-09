@@ -32,6 +32,15 @@ const OWNER_TABS: NavTab[] = [
   { key: 'tables', label: 'Reservations', href: '/(app)/reservations', icon: 'event-seat' },
 ];
 
+/** Owner working inside one branch gets the full terminal tab set. */
+const OWNER_WORKSPACE_TABS: NavTab[] = [
+  { key: 'analytics', label: 'Dashboard', href: '/(app)/analytics', icon: 'insights' },
+  { key: 'orders', label: 'Live Orders', href: '/(app)', icon: 'list' },
+  { key: 'menu', label: 'Menu & Stock', href: '/(app)/menu', icon: 'restaurant' },
+  { key: 'tables', label: 'Reservations', href: '/(app)/reservations', icon: 'event-seat' },
+  { key: 'settings', label: 'Store Settings', href: '/(app)/settings', icon: 'settings' },
+];
+
 function resolveActiveTab(pathname: string): NavTab['key'] {
   if (pathname.startsWith('/menu')) return 'menu';
   if (pathname.startsWith('/tables') || pathname.startsWith('/reservations')) return 'tables';
@@ -44,10 +53,14 @@ export function BottomNav() {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
-  const { state, isOwner } = useApp();
+  const { state, isOwner, isOwnerWorkspace } = useApp();
   const activeKey = resolveActiveTab(pathname);
   const activeOrders = countActiveOrders(state.orders);
-  const tabs = isOwner ? OWNER_TABS : TABS;
+  const tabs = isOwner
+    ? isOwnerWorkspace
+      ? OWNER_WORKSPACE_TABS
+      : OWNER_TABS
+    : TABS;
 
   return (
     <View

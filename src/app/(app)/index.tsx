@@ -33,6 +33,7 @@ export default function OrdersBoardScreen() {
     rejectOrder,
     refreshData,
     isOwner,
+    isOwnerWorkspace,
   } = useApp();
   const { width } = useWindowDimensions();
   const now = useNow(30_000);
@@ -104,12 +105,18 @@ export default function OrdersBoardScreen() {
           order={item}
           now={now}
           onAdvance={handleAdvance}
-          onReject={isOwner ? undefined : (order) => setRejectTarget(order)}
+          onReject={
+            isOwner && !isOwnerWorkspace
+              ? undefined
+              : (order) => setRejectTarget(order)
+          }
           onSelect={isTabletSplit ? (order) => setSelectedOrderId(order.id) : undefined}
           selected={isTabletSplit && orderIsSelected(item, selectedOrder)}
           highlighted={item.id === highlightedOrderId}
-          readOnly={isOwner}
-          branchLabel={isOwner ? branchCodes.get(item.branchId) : undefined}
+          readOnly={isOwner && !isOwnerWorkspace}
+          branchLabel={
+            isOwner && !isOwnerWorkspace ? branchCodes.get(item.branchId) : undefined
+          }
         />
       )}
       ItemSeparatorComponent={() => <View style={styles.listSeparator} />}
@@ -140,9 +147,9 @@ export default function OrdersBoardScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <ScreenHeader
-        title={isOwner ? 'Network Orders Board' : 'Orders Board'}
+        title={isOwner && !isOwnerWorkspace ? 'Network Orders Board' : 'Orders Board'}
         subtitle={
-          isOwner
+          isOwner && !isOwnerWorkspace
             ? 'All Branches • Cross-store live board'
             : `${state.activeBranch.name} • ${state.activeBranch.code}`
         }

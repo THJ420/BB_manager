@@ -13,6 +13,7 @@ import { pb } from '../src/services/pocketbase';
 import {
   BranchScopeError,
   assignedBranchId,
+  assertBranchScope,
   canCreateMenuItems,
   canCreateTables,
   canDeleteMenuItems,
@@ -22,6 +23,7 @@ import {
   clearAssignedBranchId,
   rememberAssignedBranchId,
   scopeWritePayload,
+  setOwnerWorkspaceBranchId,
 } from '../src/services/branchScope';
 
 const authStore = pb.authStore as { record: Record<string, unknown> | null };
@@ -108,5 +110,25 @@ describe('branch scope enforcement', () => {
   it('builds realtime filters from the authenticated branch only', () => {
     expect(branchScopeFilter('branch_dt_01')).toContain('"branchId":"branch_dt_01"');
     expect(() => branchScopeFilter('branch_ub_02')).toThrow(BranchScopeError);
+  });
+
+  it('lets the owner write inside an explicitly opened branch workspace', () => {
+    clearAssignedBranchId();
+    authStore.record = { role: 'owner', branch_id: '' };
+
+    setOwnerWorkspaceBranchId('branch_cc_poznan');
+    expect(assertBranchScope()).toBe('branch_cc_poznan');
+    expect(scopeWritePayload('menu_items', { price: 14.5 }, 'update')).toEqual({
+      price: 14.5,
+      branch_id: 'branch_cc_poznan',
+    });
+    expect(canCreateMenuItems('owner')).toBe(true);
+    expect(canDeleteMenuItems('owner')).toBe(true);
+    expect(canEditMenuDetails('owner')).toBe(true);
+    expect(canCreateTables('owner')).toBe(true);
+    expect(canDeleteTables('owner')).toBe(true);
+
+    setOwnerWorkspaceBranchId(null);
+    expect(() => assertBranchScope()).toThrow(BranchScopeError);
   });
 });

@@ -18,6 +18,12 @@ export class BranchScopeError extends Error {
 const BRIDGE_FORBIDDEN_ON_UPDATE: ReadonlySet<string> = new Set([COLLECTIONS.orders]);
 
 let cachedBranchId = '';
+/**
+ * Branch the owner has opened from the command center. Owner accounts have no
+ * `branch_id` of their own, so every write made inside the workspace is scoped
+ * to this explicit selection (mirrored by the PocketBase owner write rules).
+ */
+let cachedOwnerWorkspaceBranchId = '';
 
 function authRecordBranchId(): string {
   const record = pb.authStore.record as Record<string, unknown> | null;
@@ -32,6 +38,14 @@ export function rememberAssignedBranchId(branchId: string): void {
 
 export function clearAssignedBranchId(): void {
   cachedBranchId = '';
+}
+
+export function setOwnerWorkspaceBranchId(branchId: string | null): void {
+  cachedOwnerWorkspaceBranchId = (branchId ?? '').trim();
+}
+
+export function ownerWorkspaceBranchId(): string {
+  return cachedOwnerWorkspaceBranchId;
 }
 
 /**
@@ -64,8 +78,9 @@ export function assertBranchScope(branchId?: string): string {
   const wanted = (branchId ?? '').trim();
   if (isOwnerSession()) {
     if (wanted) return wanted;
+    if (cachedOwnerWorkspaceBranchId) return cachedOwnerWorkspaceBranchId;
     throw new BranchScopeError(
-      'Owner accounts must select a branch before changing operations.'
+      'Open a branch from the command center before changing operations.'
     );
   }
   const assigned = requireAssignedBranchId();
@@ -126,27 +141,28 @@ export function isOwnerSession(): boolean {
  * other role produces a permanent HTTP 400 that can never drain.
  */
 export function canCreateMenuItems(role: string): boolean {
-  return role === 'manager' || role === 'kitchen_lead';
+  return role === 'owner' || role === 'manager' || role === 'kitchen_lead';
 }
 
 /**
- * Mirrors `menu_items.deleteRule`: managers and kitchen leads may remove items.
+ * Mirrors `menu_items.deleteRule`: owners, managers and kitchen leads may remove
+ * items.
  */
 export function canDeleteMenuItems(role: string): boolean {
-  return role === 'manager' || role === 'kitchen_lead';
+  return role === 'owner' || role === 'manager' || role === 'kitchen_lead';
 }
 
-/** Mirrors `tables.createRule`: managers and kitchen leads may add tables. */
+/** Mirrors `tables.createRule`: owners, managers and kitchen leads add tables. */
 export function canCreateTables(role: string): boolean {
-  return role === 'manager' || role === 'kitchen_lead';
+  return role === 'owner' || role === 'manager' || role === 'kitchen_lead';
 }
 
-/** Mirrors `tables.deleteRule`: managers and kitchen leads may remove tables. */
+/** Mirrors `tables.deleteRule`: owners, managers and kitchen leads remove tables. */
 export function canDeleteTables(role: string): boolean {
-  return role === 'manager' || role === 'kitchen_lead';
+  return role === 'owner' || role === 'manager' || role === 'kitchen_lead';
 }
 
-/** Mirrors `pb_hooks/guards.pb.js`: only managers may rename/recategorise items. */
+/** Mirrors `pb_hooks/guards.pb.js`: owners may rename/recategorise anything. */
 export function canEditMenuDetails(role: string): boolean {
-  return role === 'manager';
+  return role === 'owner' || role === 'manager';
 }

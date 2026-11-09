@@ -64,7 +64,7 @@ const EFFICIENCY_TONES: Record<
 };
 
 export default function AnalyticsScreen() {
-  const { state, isOwner } = useApp();
+  const { state, isOwner, isOwnerWorkspace, exitOwnerWorkspace } = useApp();
   const now = useNow(60_000);
   const [rangePreset, setRangePreset] = useState<AnalyticsRangePreset>('today');
   const [customRange, setCustomRange] = useState<AnalyticsDateRange | null>(null);
@@ -94,7 +94,7 @@ export default function AnalyticsScreen() {
   const efficiencyTone = EFFICIENCY_TONES[efficiencyGrade.tone];
   const defaultCustomRange = useMemo(() => getDefaultCustomRange(now), [now]);
 
-  if (isOwner) {
+  if (isOwner && !isOwnerWorkspace) {
     return <OwnerDashboard />;
   }
 
@@ -109,13 +109,23 @@ export default function AnalyticsScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <ScreenHeader
-        title="Floor Analytics"
+        title={isOwnerWorkspace ? 'Branch Analytics' : 'Floor Analytics'}
         subtitle={`${state.activeBranch.name} • Shift Performance`}
         right={
           <View style={styles.shiftBadge}>
             <View style={styles.pulseDot} />
             <Text style={styles.shiftText}>LIVE SHIFT</Text>
           </View>
+        }
+        bottom={
+          isOwnerWorkspace ? (
+            <ActionButton
+              label="‹  BACK TO NETWORK"
+              variant="outline"
+              onPress={() => void exitOwnerWorkspace()}
+              testID="btn_owner_back_network"
+            />
+          ) : undefined
         }
       />
 

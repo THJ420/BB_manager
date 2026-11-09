@@ -51,6 +51,7 @@ import {
   canCreateTables,
   canDeleteMenuItems,
   canDeleteTables,
+  setOwnerWorkspaceBranchId,
 } from '../services/branchScope';
 import { startRealtime, RealtimeEntity } from '../services/realtime';
 import { flushOutbox, SyncFailure } from '../services/sync';
@@ -110,6 +111,12 @@ interface AppContextValue {
   isLiveBackend: boolean;
   /** True for the cross-branch owner console; terminal alerts stay muted. */
   isOwner: boolean;
+  /** True when the owner is operating inside one branch workspace. */
+  isOwnerWorkspace: boolean;
+  /** Owner only: open a branch with full CRUD parity. */
+  enterOwnerBranch: (branch: Branch) => Promise<void>;
+  /** Owner only: return to the all-branch command center. */
+  exitOwnerWorkspace: () => Promise<void>;
   login: (username: string, password: string) => Promise<LoginResult>;
   logout: () => Promise<void>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
@@ -150,6 +157,9 @@ const OUTBOX_RETRY_INTERVAL_MS = 30_000;
  * with no queued local writes.
  */
 const REMOTE_REFRESH_INTERVAL_MS = 60_000;
+
+/** Cache key for the owner's all-branch snapshot (branch ids are never empty). */
+const OWNER_GLOBAL_KEY = '__owner__';
 
 /** Synthetic branch shown while the owner console renders the whole network. */
 function ownerBranch(): Branch {
@@ -208,6 +218,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [rejectingOrder, setRejectingOrder] = useState<Order | null>(null);
   const activeIncomingCall = incomingCalls[0] ?? null;
   const isOwner = state.session?.role === 'owner';
+  const ownerWorkspaceBranchId = state.ownerWorkspaceBranchId;
+  const isOwnerWorkspace = isOwner && Boolean(ownerWorkspaceBranchId);
 
   useEffect(() => {
     stateRef.current = state;
@@ -532,10 +544,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       try {
         const snapshot = await fetchBranchSnapshot(branchId);
+        const current = stateRef.current;
+        const scopeMatches =
+          current.session?.role === 'owner'
+            ? current.ownerWorkspaceBranchId === branchId
+            : current.session?.branchId === branchId;
         if (
           requestId !== remoteRequestIdRef.current ||
-          stateRef.current.session?.branchId !== branchId ||
-          (options.silent && stateRef.current.outbox.length > 0)
+          !scopeMatches ||
+          (options.silent && current.outbox.length > 0)
         ) {
           return;
         }
@@ -628,20 +645,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     if (!isPocketBaseConfigured) return;
     if (state.session.role === 'owner') {
-      if (remoteLoadedBranchRef.current === '') return;
-      remoteLoadedBranchRef.current = '';
-      void refreshOwnerData();
+      const workspace = state.ownerWorkspaceBranchId;
+      if (!workspace) {
+        if (remoteLoadedBranchRef.current === OWNER_GLOBAL_KEY) return;
+        remoteLoadedBranchRef.current = OWNER_GLOBAL_KEY;
+        void refreshOwnerData();
+        return;
+      }
+      if (remoteLoadedBranchRef.current === workspace) return;
+      void refreshRemoteData(workspace);
       return;
     }
     if (remoteLoadedBranchRef.current === state.session.branchId) return;
     void refreshRemoteData(state.session.branchId);
-  }, [state.hydrated, state.session, refreshRemoteData, refreshOwnerData]);
+  }, [
+    state.hydrated,
+    state.session,
+    state.ownerWorkspaceBranchId,
+    refreshRemoteData,
+    refreshOwnerData,
+  ]);
 
   // PocketBase SSE keeps the board, menu, tables, bookings and settings live.
   useEffect(() => {
     if (!state.hydrated || !state.session || !isPocketBaseConfigured) return;
-    const branchId = state.session.branchId;
     const owner = state.session.role === 'owner';
+    const workspaceBranchId = owner ? state.ownerWorkspaceBranchId : null;
+    const allBranches = owner && !workspaceBranchId;
+    const branchId = workspaceBranchId ?? state.session.branchId;
     let disposed = false;
     let cleanup: (() => void) | null = null;
 
@@ -682,7 +713,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             realtimeReadyRef.current = true;
             // PocketBase does not replay changes that happened while SSE was
             // down, so reconcile once as soon as a subscription is established.
-            if (owner) {
+            if (allBranches) {
               void refreshOwnerData({ silent: true });
             } else {
               void refreshRemoteDataSilently(branchId);
@@ -690,7 +721,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
         },
       },
-      { allBranches: owner }
+      { allBranches }
     ).then((dispose) => {
       if (disposed) dispose();
       else cleanup = dispose;
@@ -705,6 +736,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     state.hydrated,
     state.session?.branchId,
     state.session?.role,
+    state.ownerWorkspaceBranchId,
     enqueueIncomingCall,
     refreshRemoteDataSilently,
     refreshOwnerData,
@@ -732,6 +764,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async (username: string, password: string): Promise<LoginResult> => {
       try {
         const session = await loginStaff({ username, password });
+        setOwnerWorkspaceBranchId(null);
         if (session.role === 'owner') {
           setIncomingCalls([]);
           setRejectingOrder(null);
@@ -762,6 +795,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async (): Promise<void> => {
     remoteRequestIdRef.current += 1;
     remoteLoadedBranchRef.current = null;
+    setOwnerWorkspaceBranchId(null);
     const userId = stateRef.current.session?.id;
     if (userId) {
       void clearTerminalPushToken(userId);
@@ -772,6 +806,54 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await logoutStaff();
     dispatch({ type: 'LOGOUT' });
   }, []);
+
+  /**
+   * Owner drill-down: loads the selected branch snapshot, scopes every queued
+   * write to that branch, and keeps the owner role (alerts stay muted).
+   */
+  const enterOwnerBranch = useCallback(
+    async (branch: Branch): Promise<void> => {
+      if (stateRef.current.session?.role !== 'owner') return;
+
+      const branchId = String(branch.id ?? '').trim();
+      if (!branchId) return;
+
+      setOwnerWorkspaceBranchId(branchId);
+      remoteLoadedBranchRef.current = branchId;
+      dispatch({ type: 'SET_OWNER_WORKSPACE', branchId });
+      dispatch({ type: 'SET_CONNECTION', status: 'polling' });
+      setIncomingCalls([]);
+      setRejectingOrder(null);
+      stopAlertTone();
+
+      try {
+        const snapshot = await fetchBranchSnapshot(branchId);
+        applyBranchSnapshot(branchId, snapshot);
+        dispatch({ type: 'SET_CONNECTION', status: 'live' });
+      } catch (error) {
+        console.warn('Unable to open the owner branch workspace', error);
+        setOwnerWorkspaceBranchId(null);
+        remoteLoadedBranchRef.current = null;
+        dispatch({ type: 'SET_OWNER_WORKSPACE', branchId: null });
+        dispatch({ type: 'SET_CONNECTION', status: 'offline' });
+      }
+    },
+    [applyBranchSnapshot]
+  );
+
+  /** Returns the owner to the aggregate network dashboard. */
+  const exitOwnerWorkspace = useCallback(async (): Promise<void> => {
+    if (stateRef.current.session?.role !== 'owner') return;
+
+    // Keep the cached branch until the next login/enter so writes queued inside
+    // the workspace can still drain after the owner goes back to the network.
+    remoteLoadedBranchRef.current = OWNER_GLOBAL_KEY;
+    dispatch({ type: 'SET_OWNER_WORKSPACE', branchId: null });
+    setIncomingCalls([]);
+    setRejectingOrder(null);
+    stopAlertTone();
+    await refreshOwnerData();
+  }, [refreshOwnerData]);
 
   // Employee terminals register an Expo push token so a locked/minimised phone
   // is woken by PocketBase even while the SSE socket is suspended.
@@ -790,7 +872,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const session = stateRef.current.session;
         if (!session) return;
         if (session.role === 'owner') {
-          void refreshOwnerData({ silent: true });
+          const workspace = stateRef.current.ownerWorkspaceBranchId;
+          if (workspace) {
+            void refreshRemoteDataSilently(workspace);
+          } else {
+            void refreshOwnerData({ silent: true });
+          }
           return;
         }
         if (session.branchId) {
@@ -1173,7 +1260,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         result.failedIds.length === 0 &&
         result.syncedIds.length + result.discarded.length === entries.length;
       if (queueDrained && result.syncedIds.length > 0) {
-        const branchId = stateRef.current.session?.branchId;
+        const current = stateRef.current;
+        const branchId =
+          current.session?.role === 'owner'
+            ? current.ownerWorkspaceBranchId
+            : current.session?.branchId;
         if (branchId) {
           void refreshRemoteDataSilently(branchId, { force: true });
         }
@@ -1213,13 +1304,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await new Promise((resolve) => setTimeout(resolve, 350));
       return;
     }
-    if (stateRef.current.session?.role === 'owner') {
-      await refreshOwnerData({ silent: true });
+    const current = stateRef.current;
+    if (current.session?.role === 'owner') {
+      const workspace = current.ownerWorkspaceBranchId;
+      if (!workspace) {
+        await refreshOwnerData({ silent: true });
+        return;
+      }
+      if (current.outbox.length > 0) {
+        await syncOutboxNow();
+      }
+      await refreshRemoteData(workspace, { silent: true });
       return;
     }
-    const branchId = stateRef.current.session?.branchId;
+    const branchId = current.session?.branchId;
     if (!branchId) return;
-    if (stateRef.current.outbox.length > 0) {
+    if (current.outbox.length > 0) {
       await syncOutboxNow();
     }
     await refreshRemoteData(branchId, { silent: true });
@@ -1251,11 +1351,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // subscription would otherwise leave the cache stale until app restart.
   useEffect(() => {
     if (!state.hydrated || !state.session || !isPocketBaseConfigured) return;
-    const branchId = state.session.branchId;
     const owner = state.session.role === 'owner';
+    const workspace = owner ? state.ownerWorkspaceBranchId : null;
+    const branchId = workspace ?? state.session.branchId;
     const timer = setInterval(() => {
       if (stateRef.current.connection === 'offline') return;
-      if (owner) {
+      if (owner && !workspace) {
         void refreshOwnerData({ silent: true });
         return;
       }
@@ -1266,6 +1367,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     state.hydrated,
     state.session?.branchId,
     state.session?.role,
+    state.ownerWorkspaceBranchId,
     refreshRemoteDataSilently,
     refreshOwnerData,
   ]);
@@ -1279,14 +1381,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const session = stateRef.current.session;
       if (!session) return;
       const owner = session.role === 'owner';
-      const branchId = session.branchId;
+      const workspace = owner ? stateRef.current.ownerWorkspaceBranchId : null;
+      const branchId = workspace ?? session.branchId;
       void probeConnection().then((reachable) => {
         if (!reachable) return;
         // The OS may have silently torn down the SSE socket while the app was
         // suspended without firing an error. Rebuilding the subscriptions is
         // cheap and guarantees live order alerts resume on the first frame.
         setRealtimeEpoch((epoch) => epoch + 1);
-        if (owner) {
+        if (owner && !workspace) {
           void refreshOwnerData({ silent: true });
           return;
         }
@@ -1300,6 +1403,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     state.hydrated,
     state.session?.branchId,
     state.session?.role,
+    state.ownerWorkspaceBranchId,
     probeConnection,
     refreshRemoteDataSilently,
     refreshOwnerData,
@@ -1470,6 +1574,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       state,
       isLiveBackend: isPocketBaseConfigured,
       isOwner,
+      isOwnerWorkspace,
+      enterOwnerBranch,
+      exitOwnerWorkspace,
       login,
       logout,
       updateOrderStatus,
@@ -1497,6 +1604,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [
       state,
       isOwner,
+      isOwnerWorkspace,
+      enterOwnerBranch,
+      exitOwnerWorkspace,
       login,
       logout,
       updateOrderStatus,
