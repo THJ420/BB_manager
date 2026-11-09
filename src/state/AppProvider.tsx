@@ -904,7 +904,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await enqueue(
         'UPDATE_ORDER_STATUS',
         `Order #${order?.orderNumber ?? orderId} → ${status.toUpperCase()}`,
-        { orderId, status, at }
+        {
+          orderId,
+          status,
+          at,
+          branchId: stateRef.current.activeBranch.id,
+        }
       );
     },
     [enqueue]
@@ -924,7 +929,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await enqueue(
         'UPDATE_ORDER_STATUS',
         `Order #${order?.orderNumber ?? orderId} rejected — ${trimmed}`,
-        { orderId, status: 'cancelled', at, cancellationReason: trimmed }
+        {
+          orderId,
+          status: 'cancelled',
+          at,
+          cancellationReason: trimmed,
+          branchId: stateRef.current.activeBranch.id,
+        }
       );
     },
     [enqueue]
@@ -974,7 +985,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await enqueue(
         'TOGGLE_MENU_STOCK',
         `${item?.name ?? itemId} → ${inStock ? 'IN STOCK' : 'OUT OF STOCK'}`,
-        { itemId, inStock }
+        {
+          itemId,
+          inStock,
+          branchId: stateRef.current.activeBranch.id,
+        }
       );
     },
     [enqueue]
@@ -988,7 +1003,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await enqueue(
         'UPDATE_MENU_PRICE',
         `${item?.name ?? itemId} → $${price.toFixed(2)}`,
-        { itemId, price }
+        {
+          itemId,
+          price,
+          branchId: stateRef.current.activeBranch.id,
+        }
       );
     },
     [enqueue]
@@ -1099,7 +1118,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await enqueue(
         'UPDATE_RESERVATION_STATUS',
         `${reservation?.customerName ?? reservationId} → ${status.toUpperCase()}`,
-        { reservationId, status }
+        {
+          reservationId,
+          status,
+          branchId: stateRef.current.activeBranch.id,
+        }
       );
     },
     [enqueue]

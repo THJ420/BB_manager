@@ -247,6 +247,7 @@ async function applyOutboxEntry(entry: OutboxEntry): Promise<void> {
       const orderId = String(entry.payload.orderId ?? '');
       const status = String(entry.payload.status ?? '');
       const at = String(entry.payload.at ?? new Date().toISOString());
+      const branchId = String(entry.payload.branchId ?? '');
       if (!orderId || !status) return;
       const patch: Record<string, unknown> = { status };
       if (status === 'ready') patch.ready_at = at;
@@ -255,6 +256,9 @@ async function applyOutboxEntry(entry: OutboxEntry): Promise<void> {
         const reason = String(entry.payload.cancellationReason ?? '').trim();
         if (reason) patch.cancellation_reason = reason;
       }
+      // The branch id is only used for the scope assertion; the order guard
+      // strips it before the update reaches PocketBase.
+      if (branchId) patch.branch_id = branchId;
       await pb
         .collection(COLLECTIONS.orders)
         .update(orderId, scopeWritePayload(COLLECTIONS.orders, patch, 'update'));
@@ -272,12 +276,16 @@ async function applyOutboxEntry(entry: OutboxEntry): Promise<void> {
     }
     case 'TOGGLE_MENU_STOCK': {
       const itemId = String(entry.payload.itemId ?? '');
+      const branchId = String(entry.payload.branchId ?? '');
       if (!itemId) return;
       await pb.collection(COLLECTIONS.menuItems).update(
         itemId,
         scopeWritePayload(
           COLLECTIONS.menuItems,
-          { in_stock: Boolean(entry.payload.inStock) },
+          {
+            in_stock: Boolean(entry.payload.inStock),
+            ...(branchId ? { branch_id: branchId } : {}),
+          },
           'update'
         )
       );
@@ -285,12 +293,16 @@ async function applyOutboxEntry(entry: OutboxEntry): Promise<void> {
     }
     case 'UPDATE_MENU_PRICE': {
       const itemId = String(entry.payload.itemId ?? '');
+      const branchId = String(entry.payload.branchId ?? '');
       if (!itemId) return;
       await pb.collection(COLLECTIONS.menuItems).update(
         itemId,
         scopeWritePayload(
           COLLECTIONS.menuItems,
-          { price: Number(entry.payload.price ?? 0) },
+          {
+            price: Number(entry.payload.price ?? 0),
+            ...(branchId ? { branch_id: branchId } : {}),
+          },
           'update'
         )
       );
@@ -337,12 +349,16 @@ async function applyOutboxEntry(entry: OutboxEntry): Promise<void> {
     }
     case 'UPDATE_RESERVATION_STATUS': {
       const reservationId = String(entry.payload.reservationId ?? '');
+      const branchId = String(entry.payload.branchId ?? '');
       if (!reservationId) return;
       await pb.collection(COLLECTIONS.reservations).update(
         reservationId,
         scopeWritePayload(
           COLLECTIONS.reservations,
-          { status: String(entry.payload.status ?? '') },
+          {
+            status: String(entry.payload.status ?? ''),
+            ...(branchId ? { branch_id: branchId } : {}),
+          },
           'update'
         )
       );
