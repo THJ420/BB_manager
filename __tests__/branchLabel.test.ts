@@ -2,6 +2,7 @@ import {
   branchCity,
   branchDisplayMeta,
   branchDisplayName,
+  branchSearchKey,
   decodeHtmlEntities,
 } from '../src/lib/branchLabel';
 
@@ -230,6 +231,31 @@ describe('live branch directory', () => {
       const label = branchDisplayName({ name, code, address });
       expect(label).not.toMatch(/&#?\w+;/);
       expect(label).not.toBe(code);
+    }
+  });
+});
+
+describe('branchSearchKey', () => {
+  it('folds Polish diacritics so an ASCII query matches', () => {
+    expect(branchSearchKey('Enjoy Doner Kebab Międzyzdroje')).toBe(
+      'enjoy doner kebab miedzyzdroje'
+    );
+    expect(branchSearchKey('EDK-WŁOSZAKOWICE')).toBe('edk-wloszakowice');
+    expect(branchSearchKey('Sułów')).toBe('sulow');
+  });
+
+  it('decodes entities and collapses whitespace', () => {
+    expect(branchSearchKey('Enjoy Doner Kebab &#8211;  Janowiec Wlkp')).toBe(
+      'enjoy doner kebab – janowiec wlkp'
+    );
+    expect(branchSearchKey('  Radhuni   2.0 ')).toBe('radhuni 2.0');
+  });
+
+  it('matches every live store by code, city or name fragment', () => {
+    for (const [name, code, address] of LIVE_DIRECTORY) {
+      const haystack = branchSearchKey([name, code, address].join(' '));
+      expect(haystack).toContain(branchSearchKey(code));
+      expect(haystack).toContain(branchSearchKey(name.split(' ').pop() ?? ''));
     }
   });
 });

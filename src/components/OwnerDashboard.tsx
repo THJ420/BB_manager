@@ -6,10 +6,12 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActionButton } from './ActionButton';
+import { AddStoreModal } from './AddStoreModal';
 import { AnalyticsDateRangeModal } from './AnalyticsDateRangeModal';
 import { HorizontalFilterChips } from './HorizontalFilterChips';
 import { MetricCard } from './MetricCard';
@@ -27,9 +29,15 @@ import {
   resolveAnalyticsRange,
 } from '../lib/analytics';
 import { formatCurrency, formatPercent } from '../lib/format';
-import { branchDisplayMeta, branchDisplayName } from '../lib/branchLabel';
+import {
+  branchCity,
+  branchDisplayName,
+  branchSearchKey,
+  decodeHtmlEntities,
+} from '../lib/branchLabel';
 import { useApp } from '../state/AppProvider';
-import { Colors, Radius, Spacing } from '../theme/colors';
+import { CreateBranchInput, createOwnerBranch } from '../services/branches';
+import { Colors, Layout, Radius, Spacing } from '../theme/colors';
 import { AnalyticsMetric, FilterChipOption, Reservation } from '../types';
 
 const RANGE_OPTIONS: Array<FilterChipOption<AnalyticsRangePreset>> = [
@@ -45,13 +53,16 @@ function reservationTimestamp(reservation: Reservation): number {
 
 export function OwnerDashboard() {
   const router = useRouter();
-  const { state, refreshData, logout, enterOwnerBranch } = useApp();
+  const { state, refreshData, refreshOwnerData, logout, enterOwnerBranch } = useApp();
   const now = useNow(60_000);
   const { refreshing, onRefresh } = usePullToRefresh(refreshData);
   const [rangePreset, setRangePreset] = useState<AnalyticsRangePreset>('today');
   const [customRange, setCustomRange] = useState<AnalyticsDateRange | null>(null);
   const [dateModalVisible, setDateModalVisible] = useState(false);
   const [branchFilter, setBranchFilter] = useState<string>('all');
+  const [storeQuery, setStoreQuery] = useState('');
+  const [addStoreVisible, setAddStoreVisible] = useState(false);
+  const [storeNotice, setStoreNotice] = useState<string | null>(null);
 
   const range = useMemo(
     () => resolveAnalyticsRange(rangePreset, customRange, now),
@@ -99,6 +110,38 @@ export function OwnerDashboard() {
   const selectedBranch = state.branches.find((branch) => branch.id === branchFilter);
   const scopeLabel = selectedBranch ? branchDisplayName(selectedBranch) : 'All Branches';
 
+  const visibleBranches = useMemo(() => {
+    const query = branchSearchKey(storeQuery);
+    if (!query) return state.branches;
+    return state.branches.filter((branch) =>
+      branchSearchKey(
+        [
+          branch.name,
+          branch.code,
+          branchCity(branch),
+          branch.address,
+          branchDisplayName(branch),
+        ].join(' ')
+      ).includes(query)
+    );
+  }, [state.branches, storeQuery]);
+
+  const applyStoreQuery = (value: string) => {
+    setStoreQuery(value);
+    if (branchFilter === 'all') return;
+    const query = branchSearchKey(value);
+    const stillVisible =
+      !query ||
+      visibleBranches.some(
+        (branch) =>
+          branch.id === branchFilter &&
+          branchSearchKey(
+            [branch.name, branch.code, branchCity(branch), branch.address].join(' ')
+          ).includes(query)
+      );
+    if (!stillVisible) setBranchFilter('all');
+  };
+
   const branchChips = useMemo<Array<FilterChipOption<string>>>(() => {
     const byBranch = new Map<string, number>();
     for (const order of rangeOrders) {
@@ -106,13 +149,13 @@ export function OwnerDashboard() {
     }
     return [
       { id: 'all', label: 'All Branches', count: rangeOrders.length },
-      ...state.branches.map((branch) => ({
+      ...visibleBranches.map((branch) => ({
         id: branch.id,
-        label: branchDisplayName(branch),
+        label: branch.code || branch.name,
         count: byBranch.get(branch.id) ?? 0,
       })),
     ];
-  }, [state.branches, rangeOrders]);
+  }, [visibleBranches, rangeOrders]);
 
   const networkStats = useMemo(() => {
     const tradingIds = new Set(rangeOrders.map((order) => order.branchId));
@@ -149,7 +192,7 @@ export function OwnerDashboard() {
 
   const branchRows = useMemo(
     () =>
-      state.branches
+      visibleBranches
         .map((branch) => {
           const orders = rangeOrders.filter((order) => order.branchId === branch.id);
           const analytics = computeAnalytics(orders);
@@ -166,7 +209,7 @@ export function OwnerDashboard() {
           };
         })
         .sort((a, b) => b.revenue - a.revenue),
-    [state.branches, rangeOrders, rangeReservations]
+    [visibleBranches, rangeOrders, rangeReservations]
   );
 
   const metrics = useMemo<AnalyticsMetric[]>(
@@ -239,6 +282,15 @@ export function OwnerDashboard() {
     setRangePreset(preset);
   };
 
+  const handleCreateStore = async (values: CreateBranchInput) => {
+    const created = await createOwnerBranch(
+      values,
+      state.branches.map((branch) => branch.code)
+    );
+    await refreshOwnerData();
+    setStoreNotice(`${created.code} created — syncing to the storefront.`);
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <ScreenHeader
@@ -251,6 +303,57 @@ export function OwnerDashboard() {
           </View>
         }
       />
+
+      <View style={styles.searchShell}>
+        <View style={styles.searchRow}>
+          <View style={styles.searchBar}>
+            <TextInput
+              style={styles.searchInput}
+              value={storeQuery}
+              onChangeText={applyStoreQuery}
+              placeholder="Search store, city or branch code"
+              placeholderTextColor={Colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+              accessibilityLabel="Search stores by name, city or branch code"
+              testID="owner_store_search"
+            />
+            {storeQuery.length > 0 ? (
+              <Pressable
+                onPress={() => applyStoreQuery('')}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Clear store search"
+                testID="btn_owner_store_search_clear"
+                style={({ pressed }) => [styles.searchClear, pressed && styles.searchClearPressed]}
+              >
+                <Text style={styles.searchClearText}>✕</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          <ActionButton
+            label="+ ADD STORE"
+            variant="primary"
+            compact
+            onPress={() => {
+              setStoreNotice(null);
+              setAddStoreVisible(true);
+            }}
+            testID="btn_owner_add_store"
+          />
+        </View>
+        {storeNotice ? (
+          <Text style={styles.storeNotice} testID="owner_store_notice">
+            {storeNotice}
+          </Text>
+        ) : null}
+        {storeQuery.trim() ? (
+          <Text style={styles.searchMeta} testID="owner_store_search_count">
+            {visibleBranches.length} of {state.branches.length} stores match
+          </Text>
+        ) : null}
+      </View>
 
       <HorizontalFilterChips
         options={RANGE_OPTIONS}
@@ -335,11 +438,14 @@ export function OwnerDashboard() {
           {branchRows.map((row) => {
             const selected = branchFilter === row.branch.id;
             const displayName = branchDisplayName(row.branch);
-            const meta = branchDisplayMeta(row.branch);
+            const address = decodeHtmlEntities(row.branch.address ?? '')
+              .replace(/\s+/g, ' ')
+              .trim();
             const rejected =
               row.cancellationRate > 0
                 ? `${formatPercent(row.cancellationRate)} rejected`
                 : '';
+            const detail = [address, rejected].filter(Boolean).join(' • ');
             return (
               <Pressable
                 key={row.branch.id}
@@ -356,12 +462,17 @@ export function OwnerDashboard() {
                 ]}
               >
                 <View style={styles.branchIdentity}>
-                  <Text style={styles.branchName} numberOfLines={2}>
+                  <Text style={styles.branchCode} numberOfLines={1}>
+                    {row.branch.code || '—'}
+                  </Text>
+                  <Text style={styles.branchName} numberOfLines={1}>
                     {displayName}
                   </Text>
-                  <Text style={styles.branchMeta} numberOfLines={1}>
-                    {rejected ? `${meta} • ${rejected}` : meta}
-                  </Text>
+                  {detail ? (
+                    <Text style={styles.branchMeta} numberOfLines={1}>
+                      {detail}
+                    </Text>
+                  ) : null}
                 </View>
 
                 <View style={styles.branchStats}>
@@ -390,7 +501,9 @@ export function OwnerDashboard() {
 
           {branchRows.length === 0 ? (
             <Text style={styles.emptyText}>
-              No branches are available for this account yet.
+              {storeQuery.trim()
+                ? `No store matches “${storeQuery.trim()}”. Try a city or branch code such as EDK-POZNAN.`
+                : 'No branches are available for this account yet.'}
             </Text>
           ) : null}
         </View>
@@ -435,6 +548,13 @@ export function OwnerDashboard() {
           setDateModalVisible(false);
         }}
       />
+
+      <AddStoreModal
+        visible={addStoreVisible}
+        existingCodes={state.branches.map((branch) => branch.code)}
+        onClose={() => setAddStoreVisible(false)}
+        onSubmit={handleCreateStore}
+      />
     </SafeAreaView>
   );
 }
@@ -466,6 +586,65 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.5,
     color: Colors.primary,
+  },
+  searchShell: {
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
+    gap: 4,
+    backgroundColor: Colors.background,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  searchBar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    minHeight: Layout.minTouch,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.surfaceBorder,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
+  },
+  searchInput: {
+    flex: 1,
+    minHeight: Layout.minTouch,
+    paddingVertical: 0,
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  searchClear: {
+    width: 28,
+    height: 28,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surfaceHighlight,
+  },
+  searchClearPressed: {
+    opacity: 0.7,
+  },
+  searchClearText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: Colors.textSecondary,
+  },
+  searchMeta: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    paddingHorizontal: 4,
+  },
+  storeNotice: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.success,
+    paddingHorizontal: 4,
   },
   rangeSummary: {
     flexDirection: 'row',
@@ -599,6 +778,12 @@ const styles = StyleSheet.create({
   },
   branchRowPressed: {
     opacity: 0.8,
+  },
+  branchCode: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    color: Colors.primary,
   },
   branchName: {
     fontSize: 13,

@@ -141,6 +141,8 @@ interface AppContextValue {
   syncOutboxNow: () => Promise<void>;
   /** Pull-to-refresh: flush pending writes, then reconcile the branch snapshot. */
   refreshData: () => Promise<void>;
+  /** Owner console: reload every branch's orders and reservations. */
+  refreshOwnerData: (options?: { silent?: boolean }) => Promise<void>;
   clearOutbox: () => Promise<void>;
   runSyncDiagnostics: () => Promise<SyncDiagnosticsReport>;
   setConnectionStatus: (status: ConnectionStatus) => void;
@@ -1652,6 +1654,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       saveTerminalSettings,
       syncOutboxNow,
       refreshData,
+      refreshOwnerData,
       clearOutbox,
       runSyncDiagnostics,
       setConnectionStatus,
@@ -1684,6 +1687,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       saveTerminalSettings,
       syncOutboxNow,
       refreshData,
+      refreshOwnerData,
       clearOutbox,
       runSyncDiagnostics,
       setConnectionStatus,

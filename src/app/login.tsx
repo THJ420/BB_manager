@@ -1,7 +1,8 @@
 import { Redirect, useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -25,6 +26,16 @@ export default function LoginScreen() {
   const [password, setPassword] = useState(isLiveBackend ? '' : DEMO_PASSWORD);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardOpen(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardOpen(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   if (!state.hydrated) {
     return <LoadingScreen label="Starting up…" />;
@@ -59,21 +70,28 @@ export default function LoginScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flex}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            keyboardOpen && styles.scrollContentKeyboard,
+          ]}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
-          <View style={styles.brand}>
+          <View style={[styles.brand, keyboardOpen && styles.brandCompact]}>
             <Image
-              source={require('../../assets/icon.png')}
-              style={styles.logo}
+              source={require('../../assets/splash-icon.png')}
+              style={[styles.logo, keyboardOpen && styles.logoCompact]}
+              resizeMode="contain"
               accessibilityLabel="BB Manager"
             />
             <Text style={styles.appName}>BB MANAGER</Text>
-            <Text style={styles.tagline}>Restaurant Operations Terminal</Text>
+            {!keyboardOpen ? (
+              <Text style={styles.tagline}>Restaurant Operations Terminal</Text>
+            ) : null}
           </View>
 
           <View style={styles.card}>
@@ -160,17 +178,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: Spacing.lg,
   },
+  scrollContentKeyboard: {
+    justifyContent: 'flex-start',
+    paddingVertical: Spacing.md,
+  },
   brand: {
     alignItems: 'center',
     marginBottom: Spacing.lg,
     gap: 4,
   },
+  brandCompact: {
+    marginBottom: Spacing.sm,
+    gap: 2,
+  },
   logo: {
     width: 96,
     height: 96,
-    borderRadius: Radius.lg,
     marginBottom: 8,
-    backgroundColor: Colors.surface,
+  },
+  logoCompact: {
+    width: 56,
+    height: 56,
+    marginBottom: 4,
   },
   appName: {
     fontSize: 22,

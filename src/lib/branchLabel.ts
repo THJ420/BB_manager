@@ -51,10 +51,10 @@ export function decodeHtmlEntities(value: string): string {
 
 function foldDiacritics(value: string): string {
   return value
+    .toLowerCase()
     .normalize('NFD')
     .replace(COMBINING_MARKS, '')
-    .replace(/ł/g, 'l')
-    .toLowerCase();
+    .replace(/ł/g, 'l');
 }
 
 function cleanText(value: string): string {
@@ -124,4 +124,9 @@ export function branchDisplayMeta(branch: Pick<Branch, 'code' | 'address'>): str
   const code = cleanText(branch.code ?? '');
   if (address && code) return `${address} • ${code}`;
   return address || code;
+}
+
+/** Entity-free, diacritic-free lowercase key so `miedzyzdroje` finds `Międzyzdroje`. */
+export function branchSearchKey(value: string): string {
+  return foldDiacritics(cleanText(value));
 }

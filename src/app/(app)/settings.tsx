@@ -88,6 +88,7 @@ export default function TerminalSettingsScreen() {
   }, [state.settings]);
 
   const session = state.session;
+  const isOwner = session?.role === 'owner';
   const storeOpen = state.storeConfig.isOpenForOrders;
   const pendingCount = state.outbox.length;
 
@@ -484,6 +485,7 @@ export default function TerminalSettingsScreen() {
           </Text>
         </SectionCard>
 
+        {isOwner ? (
         <SectionCard title="SMTP EMAIL CONFIGURATION">
           <Text style={styles.bodyText}>
             Placeholders for the outgoing mail server used by dispatch receipts, customer
@@ -573,6 +575,7 @@ export default function TerminalSettingsScreen() {
             />
           </View>
         </SectionCard>
+        ) : null}
 
         <SectionCard title="NOTIFICATIONS">
           <SwitchRow
@@ -590,6 +593,8 @@ export default function TerminalSettingsScreen() {
             inactiveMuted={Colors.errorMuted}
           />
 
+          {isOwner ? (
+          <>
           <View style={styles.divider} />
 
           <Text style={styles.subLabel}>NOTIFICATION RECIPIENT LIST</Text>
@@ -625,8 +630,11 @@ export default function TerminalSettingsScreen() {
             />
             <ActionButton label="+ Add Tag" variant="primary" compact onPress={addRecipient} />
           </View>
+          </>
+          ) : null}
         </SectionCard>
 
+        {isOwner ? (
         <SectionCard
           title="NOTIFICATION ROUTING"
           right={<Text style={styles.routeBadge}>{activeRouteCount}/30 ACTIVE</Text>}
@@ -754,7 +762,9 @@ export default function TerminalSettingsScreen() {
             );
           })}
         </SectionCard>
+        ) : null}
 
+        {isOwner ? (
         <SectionCard title="DELIVERY PLATFORMS & STOREFRONT URLS">
           <Text style={styles.bodyText}>
             Manage the integration endpoints and storefront links for third-party courier
@@ -797,6 +807,7 @@ export default function TerminalSettingsScreen() {
             keyboardType="url"
           />
         </SectionCard>
+        ) : null}
 
         <SectionCard title="STOREFRONT CONTACT & SOCIAL">
           <Text style={styles.bodyText}>
