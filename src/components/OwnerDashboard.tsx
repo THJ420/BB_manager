@@ -27,6 +27,7 @@ import {
   resolveAnalyticsRange,
 } from '../lib/analytics';
 import { formatCurrency, formatPercent } from '../lib/format';
+import { branchDisplayMeta, branchDisplayName } from '../lib/branchLabel';
 import { useApp } from '../state/AppProvider';
 import { Colors, Radius, Spacing } from '../theme/colors';
 import { AnalyticsMetric, FilterChipOption, Reservation } from '../types';
@@ -96,7 +97,7 @@ export function OwnerDashboard() {
   );
 
   const selectedBranch = state.branches.find((branch) => branch.id === branchFilter);
-  const scopeLabel = selectedBranch ? selectedBranch.name : 'All Branches';
+  const scopeLabel = selectedBranch ? branchDisplayName(selectedBranch) : 'All Branches';
 
   const branchChips = useMemo<Array<FilterChipOption<string>>>(() => {
     const byBranch = new Map<string, number>();
@@ -107,11 +108,44 @@ export function OwnerDashboard() {
       { id: 'all', label: 'All Branches', count: rangeOrders.length },
       ...state.branches.map((branch) => ({
         id: branch.id,
-        label: branch.code || branch.name,
+        label: branchDisplayName(branch),
         count: byBranch.get(branch.id) ?? 0,
       })),
     ];
   }, [state.branches, rangeOrders]);
+
+  const networkStats = useMemo(() => {
+    const tradingIds = new Set(rangeOrders.map((order) => order.branchId));
+    const trading = state.branches.filter((branch) => tradingIds.has(branch.id)).length;
+    return {
+      activeStores: state.branches.filter((branch) => branch.isActive).length,
+      totalStores: state.branches.length,
+      trading,
+      idle: state.branches.length - trading,
+    };
+  }, [state.branches, rangeOrders]);
+
+  const syncMeta = useMemo(() => {
+    const pending = state.outbox.length;
+    const suffix = pending > 0 ? ` • ${pending} queued` : '';
+    if (!state.lastSyncedAt) return `Awaiting first sync${suffix}`;
+    const minutes = Math.max(0, Math.round((now - state.lastSyncedAt) / 60_000));
+    const age = minutes < 1 ? 'just now' : `${minutes}m ago`;
+    return `Synced ${age}${suffix}`;
+  }, [state.lastSyncedAt, state.outbox.length, now]);
+
+  const healthLabel =
+    state.connection === 'live'
+      ? 'LIVE'
+      : state.connection === 'polling'
+        ? 'POLLING'
+        : 'OFFLINE';
+  const healthColor =
+    state.connection === 'live'
+      ? Colors.success
+      : state.connection === 'polling'
+        ? Colors.warning
+        : Colors.error;
 
   const branchRows = useMemo(
     () =>
@@ -258,12 +292,28 @@ export function OwnerDashboard() {
           />
         }
       >
-        <View style={styles.mutedNotice}>
-          <Text style={styles.mutedNoticeTitle}>TERMINAL RINGING MUTED</Text>
-          <Text style={styles.mutedNoticeText}>
-            Owner logins never play pickup alarms. Branch terminals keep their own
-            continuous ringing so concurrent stores cannot stack audio.
-          </Text>
+        <View style={styles.statStrip}>
+          <View style={styles.statStripCell}>
+            <Text style={styles.statStripLabel}>ACTIVE STORES</Text>
+            <Text style={styles.statStripValue}>{networkStats.activeStores}</Text>
+            <Text style={styles.statStripMeta}>
+              {networkStats.totalStores} in network
+            </Text>
+          </View>
+          <View style={styles.statStripCell}>
+            <Text style={styles.statStripLabel}>TRADING</Text>
+            <Text style={styles.statStripValue}>{networkStats.trading}</Text>
+            <Text style={styles.statStripMeta}>{networkStats.idle} idle in range</Text>
+          </View>
+          <View style={styles.statStripCell}>
+            <Text style={styles.statStripLabel}>NETWORK</Text>
+            <Text style={[styles.statStripValue, { color: healthColor }]}>
+              {healthLabel}
+            </Text>
+            <Text style={styles.statStripMeta} numberOfLines={1}>
+              {syncMeta}
+            </Text>
+          </View>
         </View>
 
         <View style={styles.metricGrid}>
@@ -282,21 +332,20 @@ export function OwnerDashboard() {
             </Text>
           </View>
 
-          <View style={styles.tableHeader}>
-            <Text style={[styles.tableHeadText, styles.branchCol]}>BRANCH</Text>
-            <Text style={[styles.tableHeadText, styles.numberCol]}>ORDERS</Text>
-            <Text style={[styles.tableHeadText, styles.numberCol]}>RES.</Text>
-            <Text style={[styles.tableHeadText, styles.revenueCol]}>REVENUE</Text>
-          </View>
-
           {branchRows.map((row) => {
             const selected = branchFilter === row.branch.id;
+            const displayName = branchDisplayName(row.branch);
+            const meta = branchDisplayMeta(row.branch);
+            const rejected =
+              row.cancellationRate > 0
+                ? `${formatPercent(row.cancellationRate)} rejected`
+                : '';
             return (
               <Pressable
                 key={row.branch.id}
                 onPress={() => void enterOwnerBranch(row.branch)}
                 accessibilityRole="button"
-                accessibilityLabel={`Open ${row.branch.name} management, ${row.orders} orders, ${formatCurrency(
+                accessibilityLabel={`Open ${displayName} management, ${row.orders} orders, ${formatCurrency(
                   row.revenue
                 )} revenue`}
                 testID={`owner_branch_${row.branch.code || row.branch.id}`}
@@ -306,24 +355,35 @@ export function OwnerDashboard() {
                   pressed && styles.branchRowPressed,
                 ]}
               >
-                <View style={styles.branchCol}>
-                  <Text style={styles.branchCode}>{row.branch.code || '—'}</Text>
-                  <Text style={styles.branchName} numberOfLines={1}>
-                    {row.branch.name}
+                <View style={styles.branchIdentity}>
+                  <Text style={styles.branchName} numberOfLines={2}>
+                    {displayName}
                   </Text>
-                  <Text style={styles.branchMeta}>
-                    {row.activeTickets} live • {formatPercent(row.cancellationRate)} rejected
+                  <Text style={styles.branchMeta} numberOfLines={1}>
+                    {rejected ? `${meta} • ${rejected}` : meta}
                   </Text>
                 </View>
-                <Text style={[styles.numberValue, styles.numberCol]}>
-                  {row.orders}
-                </Text>
-                <Text style={[styles.numberValue, styles.numberCol]}>
-                  {row.reservations}
-                </Text>
-                <Text style={[styles.revenueValue, styles.revenueCol]}>
-                  {formatCurrency(row.revenue)}
-                </Text>
+
+                <View style={styles.branchStats}>
+                  <View style={styles.statCell}>
+                    <Text style={styles.statLabel}>ORDERS</Text>
+                    <Text style={styles.numberValue}>{row.orders}</Text>
+                  </View>
+                  <View style={styles.statCell}>
+                    <Text style={styles.statLabel}>RES.</Text>
+                    <Text style={styles.numberValue}>{row.reservations}</Text>
+                  </View>
+                  <View style={styles.statCell}>
+                    <Text style={styles.statLabel}>LIVE</Text>
+                    <Text style={styles.numberValue}>{row.activeTickets}</Text>
+                  </View>
+                  <View style={[styles.statCell, styles.statCellRevenue]}>
+                    <Text style={styles.statLabel}>REVENUE</Text>
+                    <Text style={styles.revenueValue} numberOfLines={1}>
+                      {formatCurrency(row.revenue)}
+                    </Text>
+                  </View>
+                </View>
               </Pressable>
             );
           })}
@@ -438,23 +498,33 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
     gap: Spacing.md,
   },
-  mutedNotice: {
+  statStrip: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  statStripCell: {
+    flex: 1,
     backgroundColor: Colors.surface,
     borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    padding: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: 10,
     gap: 2,
   },
-  mutedNoticeTitle: {
-    fontSize: 10,
+  statStripLabel: {
+    fontSize: 9,
     fontWeight: '900',
     letterSpacing: 0.6,
-    color: Colors.warning,
+    color: Colors.textMuted,
   },
-  mutedNoticeText: {
-    fontSize: 11,
-    lineHeight: 16,
+  statStripValue: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: Colors.textPrimary,
+  },
+  statStripMeta: {
+    fontSize: 9,
     color: Colors.textMuted,
   },
   metricGrid: {
@@ -493,41 +563,34 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     color: Colors.textMuted,
   },
-  tableHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingBottom: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
-  tableHeadText: {
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 0.6,
-    color: Colors.textMuted,
-  },
-  branchCol: {
-    flex: 1,
-    gap: 1,
-  },
-  numberCol: {
-    width: 46,
-    textAlign: 'right',
-  },
-  revenueCol: {
-    width: 92,
-    textAlign: 'right',
-  },
   branchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 8,
-    paddingVertical: 9,
-    paddingHorizontal: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
     borderRadius: Radius.md,
     borderBottomWidth: 1,
     borderBottomColor: Colors.surfaceBorder,
+  },
+  branchIdentity: {
+    gap: 2,
+  },
+  branchStats: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: Spacing.sm,
+  },
+  statCell: {
+    flex: 1,
+    gap: 1,
+  },
+  statCellRevenue: {
+    flex: 1.6,
+  },
+  statLabel: {
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    color: Colors.textMuted,
   },
   branchRowSelected: {
     backgroundColor: Colors.primaryMuted,
@@ -537,16 +600,11 @@ const styles = StyleSheet.create({
   branchRowPressed: {
     opacity: 0.8,
   },
-  branchCode: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: Colors.textPrimary,
-    fontFamily: 'monospace',
-  },
   branchName: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: Colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 18,
+    color: Colors.textPrimary,
   },
   branchMeta: {
     fontSize: 9,

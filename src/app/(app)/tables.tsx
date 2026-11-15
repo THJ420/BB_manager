@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { Redirect, useLocalSearchParams } from 'expo-router';
 import {
   Animated,
   FlatList,
@@ -40,10 +41,13 @@ export default function DiningTablesScreen() {
     refreshData,
   } = useApp();
   const { refreshing, onRefresh } = usePullToRefresh(refreshData);
+  const params = useLocalSearchParams<{ view?: string }>();
   const role = state.session?.role ?? '';
   const canDelete = canDeleteTables(role);
   const canCreate = canCreateTables(role);
-  const [viewMode, setViewMode] = useState<ViewMode>('reservations');
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    params.view === 'tables' ? 'tables' : 'reservations'
+  );
   const [editorVisible, setEditorVisible] = useState(false);
   const [editingTable, setEditingTable] = useState<DiningTable | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DiningTable | null>(null);
@@ -102,6 +106,11 @@ export default function DiningTablesScreen() {
       },
     ],
   };
+
+  // Owners manage tables inside a branch workspace, never from the network view.
+  if (state.session?.role === 'owner' && !state.ownerWorkspaceBranchId) {
+    return <Redirect href="/(app)/analytics" />;
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>

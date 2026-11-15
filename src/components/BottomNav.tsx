@@ -11,7 +11,7 @@ import { Colors, Layout, Radius } from '../theme/colors';
 type IconName = React.ComponentProps<typeof MaterialIcons>['name'];
 
 interface NavTab {
-  key: 'orders' | 'menu' | 'tables' | 'analytics' | 'settings';
+  key: 'orders' | 'menu' | 'tables' | 'reservations' | 'analytics' | 'settings';
   label: string;
   href: Href;
   icon: IconName;
@@ -29,21 +29,28 @@ const TABS: NavTab[] = [
 const OWNER_TABS: NavTab[] = [
   { key: 'analytics', label: 'Dashboard', href: '/(app)/analytics', icon: 'insights' },
   { key: 'orders', label: 'Live Orders', href: '/(app)', icon: 'list' },
-  { key: 'tables', label: 'Reservations', href: '/(app)/reservations', icon: 'event-seat' },
+  { key: 'reservations', label: 'Reservations', href: '/(app)/reservations', icon: 'event-seat' },
 ];
 
-/** Owner working inside one branch gets the full terminal tab set. */
+/** Owner working inside one branch gets the full store control panel. */
 const OWNER_WORKSPACE_TABS: NavTab[] = [
   { key: 'analytics', label: 'Dashboard', href: '/(app)/analytics', icon: 'insights' },
   { key: 'orders', label: 'Live Orders', href: '/(app)', icon: 'list' },
   { key: 'menu', label: 'Menu & Stock', href: '/(app)/menu', icon: 'restaurant' },
-  { key: 'tables', label: 'Reservations', href: '/(app)/reservations', icon: 'event-seat' },
+  {
+    key: 'tables',
+    label: 'Dining Tables',
+    href: { pathname: '/(app)/tables', params: { view: 'tables' } },
+    icon: 'table-restaurant',
+  },
+  { key: 'reservations', label: 'Reservations', href: '/(app)/reservations', icon: 'event-seat' },
   { key: 'settings', label: 'Store Settings', href: '/(app)/settings', icon: 'settings' },
 ];
 
 function resolveActiveTab(pathname: string): NavTab['key'] {
   if (pathname.startsWith('/menu')) return 'menu';
-  if (pathname.startsWith('/tables') || pathname.startsWith('/reservations')) return 'tables';
+  if (pathname.startsWith('/tables')) return 'tables';
+  if (pathname.startsWith('/reservations')) return 'reservations';
   if (pathname.startsWith('/analytics')) return 'analytics';
   if (pathname.startsWith('/settings')) return 'settings';
   return 'orders';

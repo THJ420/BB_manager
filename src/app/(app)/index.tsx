@@ -20,6 +20,7 @@ import { StatusBadge } from '../../components/StatusBadge';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useNow } from '../../hooks/useNow';
 import { filterOrders, orderFilterOptions, OrderFilter } from '../../lib/domain';
+import { branchDisplayName } from '../../lib/branchLabel';
 import { formatCurrency } from '../../lib/format';
 import { useApp } from '../../state/AppProvider';
 import { Colors, Radius, Spacing } from '../../theme/colors';
@@ -74,10 +75,10 @@ export default function OrdersBoardScreen() {
     () => filterOrders(state.orders, selectedFilter),
     [state.orders, selectedFilter]
   );
-  const branchCodes = useMemo(() => {
+  const branchLabels = useMemo(() => {
     const byId = new Map<string, string>();
     for (const branch of state.branches) {
-      byId.set(branch.id, branch.code || branch.name);
+      byId.set(branch.id, branchDisplayName(branch));
     }
     return byId;
   }, [state.branches]);
@@ -115,7 +116,7 @@ export default function OrdersBoardScreen() {
           highlighted={item.id === highlightedOrderId}
           readOnly={isOwner && !isOwnerWorkspace}
           branchLabel={
-            isOwner && !isOwnerWorkspace ? branchCodes.get(item.branchId) : undefined
+            isOwner && !isOwnerWorkspace ? branchLabels.get(item.branchId) : undefined
           }
         />
       )}

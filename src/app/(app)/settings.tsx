@@ -16,6 +16,7 @@ import { BRANCHES } from '../../constants/branches';
 import { NOTIFICATION_EVENT_CATEGORIES } from '../../constants/notificationEvents';
 import { getAlertTone } from '../../lib/alertTones';
 import { storeHoursSummary } from '../../lib/domain';
+import { branchDisplayName } from '../../lib/branchLabel';
 import { initials, roleLabel } from '../../lib/format';
 import { currentAppVersion } from '../../services/updater';
 import { useApp } from '../../state/AppProvider';
@@ -29,7 +30,6 @@ import {
   NotificationSettings,
   SmtpEncryption,
   SmtpSettings,
-  StaffRole,
   TerminalSettings,
 } from '../../types';
 
@@ -38,15 +38,6 @@ const CONNECTION_MODES: Array<{ id: ConnectionStatus; label: string }> = [
   { id: 'polling', label: 'SYNCING' },
   { id: 'offline', label: 'OFFLINE' },
 ];
-
-const ROLE_LABELS: Record<StaffRole, string> = {
-  owner: 'OWNER',
-  manager: 'MANAGER',
-  kitchen_lead: 'KITCHEN LEAD',
-  floor_staff: 'FLOOR STAFF',
-};
-
-const STAFF_ROLES: StaffRole[] = ['floor_staff', 'kitchen_lead', 'manager'];
 
 export default function TerminalSettingsScreen() {
   const router = useRouter();
@@ -76,11 +67,6 @@ export default function TerminalSettingsScreen() {
   const [clearQueueVisible, setClearQueueVisible] = useState(false);
 
   const [recipientInput, setRecipientInput] = useState('');
-  const [newStaffName, setNewStaffName] = useState('');
-  const [newStaffEmail, setNewStaffEmail] = useState('');
-  const [newStaffPassword, setNewStaffPassword] = useState('');
-  const [newStaffRole, setNewStaffRole] = useState<StaffRole>('floor_staff');
-  const [staffError, setStaffError] = useState<string | null>(null);
 
   const [activeRouteCategoryId, setActiveRouteCategoryId] = useState(
     NOTIFICATION_EVENT_CATEGORIES[0]?.id ?? 'orders'
@@ -165,37 +151,6 @@ export default function TerminalSettingsScreen() {
     updateNotifications({
       recipients: draft.notifications.recipients.filter((entry) => entry !== email),
     });
-  };
-
-  const addStaffMember = () => {
-    if (!newStaffName.trim() || !newStaffEmail.trim()) {
-      setStaffError('Provide a staff name and email address.');
-      return;
-    }
-    setDraft((current) => ({
-      ...current,
-      staff: [
-        ...current.staff,
-        {
-          id: `staff_${Date.now()}`,
-          name: newStaffName.trim(),
-          email: newStaffEmail.trim(),
-          role: newStaffRole,
-        },
-      ],
-    }));
-    setNewStaffName('');
-    setNewStaffEmail('');
-    setNewStaffPassword('');
-    setStaffError(null);
-  };
-
-  const removeStaffMember = (staffId: string) => {
-    if (draft.staff.length <= 1) return;
-    setDraft((current) => ({
-      ...current,
-      staff: current.staff.filter((member) => member.id !== staffId),
-    }));
   };
 
   const handleBranchSwitch = async (branch: Branch) => {
@@ -969,7 +924,7 @@ export default function TerminalSettingsScreen() {
                     style={[styles.branchText, selected && styles.branchTextSelected]}
                     numberOfLines={1}
                   >
-                    {branch.code}
+                    {branchDisplayName(branch)}
                   </Text>
                 </Pressable>
               );
@@ -987,103 +942,24 @@ export default function TerminalSettingsScreen() {
           <Text style={styles.subLabel}>BRANCH CODE</Text>
           <Text style={styles.rowSubtitle}>{state.activeBranch.code}</Text>
 
-          <View style={styles.divider} />
+          {session?.role === 'owner' ? (
+            <>
+              <View style={styles.divider} />
 
-          <Text style={styles.subLabel}>ACTIVE STAFF ROSTER</Text>
-          {draft.staff.map((member) => (
-            <View key={member.id} style={styles.staffRow}>
-              <View style={styles.staffAvatar}>
-                <Text style={styles.staffAvatarText}>{initials(member.name)}</Text>
-              </View>
-              <View style={styles.staffText}>
-                <Text style={styles.staffName} numberOfLines={1}>
-                  {member.name}
-                </Text>
-                <Text style={styles.staffEmail} numberOfLines={1}>
-                  {member.email}
-                </Text>
-              </View>
-              <View style={styles.rolePill}>
-                <Text style={styles.rolePillText}>{ROLE_LABELS[member.role]}</Text>
-              </View>
-              {draft.staff.length > 1 ? (
-                <Pressable
-                  onPress={() => removeStaffMember(member.id)}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remove ${member.name}`}
-                  style={styles.removeTouch}
-                >
-                  <Text style={styles.staffRemove}>✕</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          ))}
-
-          <Text style={styles.subLabel}>REGISTER NEW STAFF MEMBER</Text>
-          <TextField
-            label="Full Name"
-            value={newStaffName}
-            onChangeText={(value) => {
-              setNewStaffName(value);
-              setStaffError(null);
-            }}
-            placeholder="e.g. Jamie Rivera"
-          />
-          <TextField
-            label="Staff Email"
-            value={newStaffEmail}
-            onChangeText={(value) => {
-              setNewStaffEmail(value);
-              setStaffError(null);
-            }}
-            placeholder="jamie@bbmanager.internal"
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-          <TextField
-            label="Temporary Password / PIN"
-            value={newStaffPassword}
-            onChangeText={setNewStaffPassword}
-            secureTextEntry
-            autoCapitalize="none"
-            placeholder="Temporary credential"
-          />
-
-          <View style={styles.roleRow}>
-            {STAFF_ROLES.map((role) => {
-              const selected = newStaffRole === role;
-              return (
-                <Pressable
-                  key={role}
-                  onPress={() => setNewStaffRole(role)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  style={[
-                    styles.roleChip,
-                    selected ? styles.roleChipSelected : styles.roleChipIdle,
-                  ]}
-                >
-                  <Text
-                    style={[styles.roleChipText, selected && styles.roleChipTextSelected]}
-                    numberOfLines={1}
-                  >
-                    {ROLE_LABELS[role]}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {staffError ? <Text style={styles.staffError}>{staffError}</Text> : null}
-
-          <ActionButton
-            label="+ Register Staff Member"
-            variant="primary"
-            fullWidth
-            onPress={addStaffMember}
-            testID="btn_register_staff"
-          />
+              <Text style={styles.subLabel}>EMPLOYEE TERMINAL LOGINS</Text>
+              <Text style={styles.bodyText}>
+                Issue a username and password for this store. Each account is locked
+                to {state.activeBranch.name} and cannot open any other branch.
+              </Text>
+              <ActionButton
+                label="MANAGE STAFF ACCOUNTS"
+                variant="primary"
+                fullWidth
+                onPress={() => router.push('/(app)/staff')}
+                testID="btn_open_staff_management"
+              />
+            </>
+          ) : null}
         </SectionCard>
 
         <ActionButton
@@ -1608,91 +1484,6 @@ const styles = StyleSheet.create({
   },
   branchTextSelected: {
     color: Colors.primary,
-  },
-  staffRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: Colors.surfaceHighlight,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-    padding: 8,
-  },
-  staffAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  staffAvatarText: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: Colors.white,
-  },
-  staffText: {
-    flex: 1,
-    gap: 1,
-  },
-  staffName: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: Colors.textPrimary,
-  },
-  staffEmail: {
-    fontSize: 10,
-    color: Colors.textSecondary,
-  },
-  rolePill: {
-    backgroundColor: Colors.primaryMuted,
-    borderRadius: Radius.sm,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-  },
-  rolePillText: {
-    fontSize: 8,
-    fontWeight: '900',
-    color: Colors.primary,
-  },
-  staffRemove: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: Colors.error,
-  },
-  roleRow: {
-    flexDirection: 'row',
-    gap: 4,
-  },
-  roleChip: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: Radius.sm,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 2,
-  },
-  roleChipIdle: {
-    backgroundColor: Colors.surfaceElevated,
-    borderColor: Colors.surfaceBorder,
-  },
-  roleChipSelected: {
-    backgroundColor: Colors.primaryMuted,
-    borderColor: Colors.primary,
-  },
-  roleChipText: {
-    fontSize: 8,
-    fontWeight: '800',
-    color: Colors.textMuted,
-  },
-  roleChipTextSelected: {
-    color: Colors.primary,
-  },
-  staffError: {
-    fontSize: 11,
-    color: Colors.error,
   },
   version: {
     fontSize: 10,

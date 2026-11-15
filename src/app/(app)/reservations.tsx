@@ -11,6 +11,7 @@ import {
   reservationFilterOptions,
   ReservationFilter,
 } from '../../lib/domain';
+import { branchDisplayName } from '../../lib/branchLabel';
 import { useApp } from '../../state/AppProvider';
 import { Colors, Radius, Spacing } from '../../theme/colors';
 
@@ -30,20 +31,25 @@ export default function ReservationsScreen() {
   const arrivedCount = state.reservations.filter(
     (reservation) => reservation.status === 'arrived'
   ).length;
-  const branchCodes = useMemo(() => {
+  const branchLabels = useMemo(() => {
     const byId = new Map<string, string>();
     for (const branch of state.branches) {
-      byId.set(branch.id, branch.code || branch.name);
+      byId.set(branch.id, branchDisplayName(branch));
     }
     return byId;
   }, [state.branches]);
+
+  // Tab switches use router.replace, so the stack has no history to pop:
+  // the back action must name its destination explicitly.
+  const networkMode = isOwner && !isOwnerWorkspace;
+  const backTarget = networkMode ? '/(app)/analytics' : '/(app)/tables';
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <ScreenHeader
         title="Guest Reservations"
         subtitle={
-          isOwner && !isOwnerWorkspace
+          networkMode
             ? 'All Branches • Cross-store booking ledger'
             : `${state.activeBranch.name} • Bookings & arrival dispatch`
         }
@@ -54,9 +60,9 @@ export default function ReservationsScreen() {
         }
         bottom={
           <ActionButton
-            label="‹  BACK TO TABLES"
+            label={networkMode ? '‹  BACK TO DASHBOARD' : '‹  BACK TO TABLES'}
             variant="outline"
-            onPress={() => router.back()}
+            onPress={() => router.replace(backTarget)}
             testID="btn_reservations_back"
           />
         }
@@ -74,12 +80,8 @@ export default function ReservationsScreen() {
         renderItem={({ item }) => (
           <ReservationCard
             reservation={item}
-            readOnly={isOwner && !isOwnerWorkspace}
-            branchLabel={
-              isOwner && !isOwnerWorkspace
-                ? branchCodes.get(item.branchId)
-                : undefined
-            }
+            readOnly={networkMode}
+            branchLabel={networkMode ? branchLabels.get(item.branchId) : undefined}
             onToggleArrival={(reservationId, status) =>
               void updateReservationStatus(reservationId, status)
             }
