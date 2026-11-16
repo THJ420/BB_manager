@@ -1,0 +1,6 @@
+{
+  "name": "order-alarm",
+  "version": "1.0.0",
+  "description": "Lock-screen full-screen-intent incoming-order alarm engine for BB Manager.",
+  "private": true
+}

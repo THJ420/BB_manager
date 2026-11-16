@@ -9,13 +9,27 @@ jest.mock('../src/services/pocketbase', () => ({
   },
 }));
 
-jest.mock('../src/services/uploads', () => ({
-  buildMenuItemWritePayload: jest.fn(async () => ({ name: 'serialized payload' })),
-}));
+jest.mock('../src/services/uploads', () => {
+  class UploadPayloadError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = 'UploadPayloadError';
+    }
+  }
+  return {
+    UploadPayloadError,
+    buildMenuItemWritePayload: jest.fn(async () => ({ name: 'serialized payload' })),
+    isLocalImageMissing: jest.fn(async () => false),
+  };
+});
 
 import { pb } from '../src/services/pocketbase';
-import { buildMenuItemWritePayload } from '../src/services/uploads';
-import { flushOutbox } from '../src/services/sync';
+import {
+  buildMenuItemWritePayload,
+  isLocalImageMissing,
+  UploadPayloadError,
+} from '../src/services/uploads';
+import { flushOutbox, MAX_OUTBOX_RETRIES } from '../src/services/sync';
 import {
   createDefaultStoreConfig,
   createDefaultTerminalSettings,
@@ -33,10 +47,14 @@ const collectionMock = pb.collection as unknown as jest.Mock;
 const uploadMock = buildMenuItemWritePayload as jest.MockedFunction<
   typeof buildMenuItemWritePayload
 >;
+const missingPhotoMock = isLocalImageMissing as jest.MockedFunction<
+  typeof isLocalImageMissing
+>;
 
 function entry(
   actionType: OutboxActionType,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  retryCount = 0
 ): OutboxEntry {
   return {
     id: `act_1_${actionType}`,
@@ -44,7 +62,7 @@ function entry(
     label: actionType,
     payload,
     createdAt: 1,
-    retryCount: 0,
+    retryCount,
     synced: false,
   };
 }
@@ -62,6 +80,7 @@ describe('sync outbox handlers', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     uploadMock.mockResolvedValue({ name: 'serialized payload' });
+    missingPhotoMock.mockResolvedValue(false);
   });
 
   it('passes the image-removal flag when updating a menu item', async () => {
@@ -395,5 +414,110 @@ describe('sync outbox handlers', () => {
       status: 'ready',
       ready_at: '2026-01-01T12:00:00.000Z',
     });
+  });
+
+  it('dead-letters an unreadable photo instead of jamming the queue', async () => {
+    uploadMock.mockRejectedValue(
+      new UploadPayloadError('The attached photo is no longer available on this device.')
+    );
+    const create = jest.fn(async () => undefined);
+    const update = jest.fn(async () => undefined);
+    useCollection('menu_items', { create, update });
+    const item = createSeedMenu(1)[0] as MenuItem;
+
+    const result = await flushOutbox([
+      entry('CREATE_MENU_ITEM', { item, imageRemoved: false }),
+      entry('TOGGLE_MENU_STOCK', { itemId: 'm_02', inStock: true }),
+    ]);
+
+    expect(result.discarded).toHaveLength(1);
+    expect(result.discarded[0].error.kind).toBe('payload');
+    expect(result.failedIds).toEqual([]);
+    // The later non-file mutation still syncs in the same flush.
+    expect(result.syncedIds).toEqual(['act_1_TOGGLE_MENU_STOCK']);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('reclassifies a status-0 upload failure as permanent when the photo is gone', async () => {
+    const create = jest.fn(async () => {
+      throw {
+        status: 0,
+        message: 'Network request failed',
+        originalError: { name: 'TypeError', message: 'Network request failed' },
+      };
+    });
+    useCollection('menu_items', { create });
+    missingPhotoMock.mockResolvedValue(true);
+    const item = {
+      ...(createSeedMenu(1)[0] as MenuItem),
+      imageUrl: 'file:///data/user/0/com.bbmanager.app/cache/picked.jpg',
+    };
+
+    const result = await flushOutbox([
+      entry('CREATE_MENU_ITEM', { item, imageRemoved: false }),
+    ]);
+
+    expect(result.discarded).toHaveLength(1);
+    expect(result.discarded[0].error.kind).toBe('payload');
+    expect(result.failedIds).toEqual([]);
+    expect(missingPhotoMock).toHaveBeenCalledWith(item.imageUrl);
+  });
+
+  it('keeps a genuine network failure queued while the photo still exists', async () => {
+    const create = jest.fn(async () => {
+      throw { status: 0, message: 'Network request failed' };
+    });
+    useCollection('menu_items', { create });
+    missingPhotoMock.mockResolvedValue(false);
+    const item = {
+      ...(createSeedMenu(1)[0] as MenuItem),
+      imageUrl: 'file:///data/user/0/com.bbmanager.app/cache/picked.jpg',
+    };
+
+    const result = await flushOutbox([
+      entry('CREATE_MENU_ITEM', { item, imageRemoved: false }),
+    ]);
+
+    expect(result.discarded).toEqual([]);
+    expect(result.failedIds).toEqual(['act_1_CREATE_MENU_ITEM']);
+    expect(result.failures[0].error.kind).toBe('network');
+  });
+
+  it('drops a server-rejected mutation once the retry ceiling is reached', async () => {
+    const create = jest.fn(async () => {
+      throw {
+        status: 400,
+        message: 'Failed to create record.',
+        response: { message: 'Failed to create record.', data: {} },
+      };
+    });
+    useCollection('menu_items', { create });
+    const item = createSeedMenu(1)[0] as MenuItem;
+
+    const result = await flushOutbox([
+      entry('CREATE_MENU_ITEM', { item, imageRemoved: false }, MAX_OUTBOX_RETRIES),
+    ]);
+
+    expect(result.discarded).toHaveLength(1);
+    expect(result.discarded[0].error.message).toContain('Retry limit reached');
+    expect(result.failedIds).toEqual([]);
+  });
+
+  it('never applies the retry ceiling to offline transport failures', async () => {
+    const update = jest.fn(async () => {
+      throw { status: 0, message: 'Network request failed' };
+    });
+    useCollection('orders', { update });
+
+    const result = await flushOutbox([
+      entry(
+        'UPDATE_ORDER_STATUS',
+        { orderId: 'ord_101', status: 'ready' },
+        MAX_OUTBOX_RETRIES + 5
+      ),
+    ]);
+
+    expect(result.discarded).toEqual([]);
+    expect(result.failedIds).toEqual(['act_1_UPDATE_ORDER_STATUS']);
   });
 });

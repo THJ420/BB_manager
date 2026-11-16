@@ -198,6 +198,28 @@ describe('appReducer', () => {
     expect(synced.lastSyncedAt).toBe(NOW);
   });
 
+  it('increments retryCount only for the failed outbox ids', () => {
+    const entry: OutboxEntry = {
+      id: 'act_1',
+      actionType: 'UPDATE_ORDER_STATUS',
+      label: 'Order #205 → PREPARING',
+      payload: { orderId: 'ord_102', status: 'preparing' },
+      createdAt: NOW,
+      retryCount: 2,
+      synced: false,
+    };
+    const other: OutboxEntry = { ...entry, id: 'act_2', retryCount: 0 };
+    const queued = appReducer(
+      appReducer(hydratedState(), { type: 'ADD_OUTBOX', entry }),
+      { type: 'ADD_OUTBOX', entry: other }
+    );
+
+    const retried = appReducer(queued, { type: 'RETRY_OUTBOX', ids: ['act_1'] });
+
+    expect(retried.outbox.find((item) => item.id === 'act_1')?.retryCount).toBe(3);
+    expect(retried.outbox.find((item) => item.id === 'act_2')?.retryCount).toBe(0);
+  });
+
   it('switches the active branch and updates the staff session', () => {
     const start: AppState = {
       ...hydratedState(),

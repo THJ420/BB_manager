@@ -9,6 +9,7 @@ import { ActionButton } from './ActionButton';
 
 export interface IncomingOrderCallModalProps {
   order: Order | null;
+  storeName: string;
   onAccept: (order: Order) => void;
   onReject: (order: Order) => void;
 }
@@ -19,6 +20,7 @@ export interface IncomingOrderCallModalProps {
  */
 export function IncomingOrderCallModal({
   order,
+  storeName,
   onAccept,
   onReject,
 }: IncomingOrderCallModalProps) {
@@ -61,7 +63,9 @@ export function IncomingOrderCallModal({
       <SafeAreaView style={styles.safe} accessibilityViewIsModal>
         <View style={styles.topBar}>
           <View style={styles.liveDot} />
-          <Text style={styles.topLabel}>RADHUNI TERMINAL · INCOMING ORDER</Text>
+          <Text style={styles.topLabel} numberOfLines={1}>
+            {storeName} Terminal · Incoming Order
+          </Text>
         </View>
 
         <View style={styles.hero}>
@@ -159,6 +163,7 @@ const styles = StyleSheet.create({
   },
   topLabel: {
     ...Typography.sectionLabel,
+    flexShrink: 1,
     letterSpacing: 1.1,
     color: Colors.textSecondary,
   },

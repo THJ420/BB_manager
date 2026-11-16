@@ -35,10 +35,19 @@ jest.mock(
   { virtual: true }
 );
 
+jest.mock('../src/services/orderAlarm', () => ({
+  checkFullScreenIntentAccess: jest.fn(() => 'granted'),
+  openFullScreenIntentSettings: jest.fn(() => true),
+}));
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import {
+  checkFullScreenIntentAccess,
+  openFullScreenIntentSettings,
+} from '../src/services/orderAlarm';
 import {
   markBackgroundRationaleCompleted,
   openAppPermissionSettings,
@@ -56,6 +65,8 @@ beforeEach(() => {
   (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'granted' });
   (Notifications.requestPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'granted' });
   (IntentLauncher.startActivityAsync as jest.Mock).mockResolvedValue({ resultCode: 0 });
+  (checkFullScreenIntentAccess as jest.Mock).mockReturnValue('granted');
+  (openFullScreenIntentSettings as jest.Mock).mockReturnValue(true);
 });
 
 describe('shouldShowBackgroundRationale', () => {
@@ -116,6 +127,19 @@ describe('requestBackgroundPermissions', () => {
     (IntentLauncher.startActivityAsync as jest.Mock).mockRejectedValue(new Error('no activity'));
     const result = await requestBackgroundPermissions();
     expect(result.batteryExemption).toBe('unsupported');
+  });
+
+  it('reports granted full-screen intent access without opening settings', async () => {
+    const result = await requestBackgroundPermissions();
+    expect(result.fullScreenIntent).toBe('granted');
+    expect(openFullScreenIntentSettings).not.toHaveBeenCalled();
+  });
+
+  it('opens the Android 14+ full-screen notification access page when needed', async () => {
+    (checkFullScreenIntentAccess as jest.Mock).mockReturnValue('needs-settings');
+    const result = await requestBackgroundPermissions();
+    expect(openFullScreenIntentSettings).toHaveBeenCalled();
+    expect(result.fullScreenIntent).toBe('settings-opened');
   });
 });
 

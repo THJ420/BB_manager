@@ -8,7 +8,7 @@ import {
   isDuplicateRecordError,
   isNotFoundError,
 } from './errors';
-import { buildMenuItemWritePayload } from './uploads';
+import { buildMenuItemWritePayload, isLocalImageMissing } from './uploads';
 import {
   toBranchSettingsRecord,
   toMenuItemRecord,
@@ -43,14 +43,22 @@ export interface FlushResult {
 }
 
 /**
- * A retry can never fix these: the target record is gone (404) or PocketBase
- * rejected the payload shape (400 validation). Keeping them queued is what
- * previously jammed every later mutation.
+ * A retry can never fix these: the target record is gone (404), PocketBase
+ * rejected the payload shape (400 validation), or the attached local photo is
+ * unreadable/corrupt (payload). Keeping them queued is what previously jammed
+ * every later mutation.
  */
 const PERMANENT_ERROR_KINDS: ReadonlySet<DescribedPocketBaseError['kind']> = new Set([
   'not-found',
   'validation',
+  'payload',
 ]);
+
+/**
+ * Ceiling for retryable server rejections (auth/rule/conflict/unknown). Pure
+ * transport failures stay unlimited so an offline terminal keeps its queue.
+ */
+export const MAX_OUTBOX_RETRIES = 10;
 
 const DEMO_SYNC_DELAY_MS = 450;
 
@@ -399,6 +407,30 @@ async function applyOutboxEntry(entry: OutboxEntry): Promise<void> {
 }
 
 /**
+ * RN collapses a missing local file into "TypeError: Network request failed"
+ * (status 0), indistinguishable from a real outage at the transport layer.
+ * When a menu write fails that way, ask the OS whether the photo still exists;
+ * if it is gone the failure is permanent, not retryable.
+ */
+async function reclassifyMissingPhoto(
+  entry: OutboxEntry,
+  described: DescribedPocketBaseError
+): Promise<void> {
+  if (described.kind !== 'network') return;
+  if (entry.actionType !== 'CREATE_MENU_ITEM' && entry.actionType !== 'UPDATE_MENU_ITEM') {
+    return;
+  }
+  const item = entry.payload.item as MenuItem | undefined;
+  if (!item?.imageUrl) return;
+  if (await isLocalImageMissing(item.imageUrl)) {
+    described.kind = 'payload';
+    described.message =
+      'The attached photo is no longer available on this device. Re-attach the image and save again.';
+    described.detail = '';
+  }
+}
+
+/**
  * Delivers queued offline mutations in order. A failed entry stays queued so the
  * terminal can retry; successful entries are safe to mark as synced.
  */
@@ -439,6 +471,14 @@ export async function flushOutbox(entries: OutboxEntry[]): Promise<FlushResult> 
       console.log(`[sync] ok ${entry.actionType} (${entry.id})`);
     } catch (error) {
       const described = describePocketBaseError(error);
+      await reclassifyMissingPhoto(entry, described);
+      const exhaustedRetries =
+        described.kind !== 'network' &&
+        described.kind !== 'aborted' &&
+        entry.retryCount >= MAX_OUTBOX_RETRIES;
+      if (exhaustedRetries) {
+        described.message = `Retry limit reached (${MAX_OUTBOX_RETRIES}). ${described.message}`;
+      }
       const failure: SyncFailure = {
         entryId: entry.id,
         actionType: entry.actionType,
@@ -446,7 +486,7 @@ export async function flushOutbox(entries: OutboxEntry[]): Promise<FlushResult> 
         error: described,
       };
 
-      if (PERMANENT_ERROR_KINDS.has(described.kind)) {
+      if (PERMANENT_ERROR_KINDS.has(described.kind) || exhaustedRetries) {
         // Dead-letter: drop this mutation only, keep the rest of the queue live.
         discarded.push(failure);
         console.warn(

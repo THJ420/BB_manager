@@ -1,6 +1,19 @@
 import { Platform } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
 import { MenuItem } from '../types';
 import { isLocalImageUri, toMenuItemRecord } from './mappers';
+
+/**
+ * A local photo that cannot be read or serialized is a permanent payload
+ * problem, not a transport problem. The outbox dead-letters this error instead
+ * of retrying it forever (which previously jammed the whole queue).
+ */
+export class UploadPayloadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UploadPayloadError';
+  }
+}
 
 const MIME_BY_EXTENSION: Record<string, string> = {
   jpg: 'image/jpeg',
@@ -8,6 +21,19 @@ const MIME_BY_EXTENSION: Record<string, string> = {
   png: 'image/png',
   webp: 'image/webp',
   heic: 'image/heic',
+  heif: 'image/heif',
+  gif: 'image/gif',
+  bmp: 'image/bmp',
+};
+
+const EXTENSION_BY_MIME: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
+  'image/gif': 'gif',
+  'image/bmp': 'bmp',
 };
 
 function serializeFormValue(value: unknown): string {
@@ -17,19 +43,33 @@ function serializeFormValue(value: unknown): string {
   return String(value ?? '');
 }
 
-function imageFileName(item: MenuItem): string {
-  const mimeType = imageMimeType(item.imageUrl ?? '');
-  const extension = Object.entries(MIME_BY_EXTENSION).find(
-    ([, mime]) => mime === mimeType
-  )?.[0];
-  return `menu_${item.id}.${extension ?? 'jpg'}`;
-}
-
+/**
+ * content:// and ph:// URIs usually carry no extension, and data: URIs can
+ * declare exotic subtypes. Everything unrecognized falls back to JPEG so the
+ * multipart part always has a valid image MIME and a matching file name.
+ */
 function imageMimeType(uri: string): string {
   const dataUriMatch = /^data:([^;,]+)[;,]/.exec(uri);
-  if (dataUriMatch?.[1]) return dataUriMatch[1];
+  const declared = dataUriMatch?.[1]?.toLowerCase();
+  if (declared && EXTENSION_BY_MIME[declared]) return declared;
   const extension = /\.([a-z0-9]+)(?:\?|#|$)/i.exec(uri)?.[1]?.toLowerCase();
   return (extension && MIME_BY_EXTENSION[extension]) ?? 'image/jpeg';
+}
+
+function imageFileName(item: MenuItem): string {
+  const extension = EXTENSION_BY_MIME[imageMimeType(item.imageUrl ?? '')] ?? 'jpg';
+  return `menu_${item.id}.${extension}`;
+}
+
+/** True only when the OS confirms the file is gone; probe errors stay optimistic. */
+export async function isLocalImageMissing(uri: string): Promise<boolean> {
+  if (!uri || !isLocalImageUri(uri) || uri.startsWith('data:')) return false;
+  try {
+    const info = await FileSystem.getInfoAsync(uri);
+    return info.exists === false;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -37,6 +77,8 @@ function imageMimeType(uri: string): string {
  * to the PocketBase `image` file field; existing URLs stay in `image_url`.
  * When a user removes the last photo, `clearImage` sends an empty file value so
  * PocketBase deletes the previously uploaded file instead of keeping it alive.
+ * Every failure inside this boundary is an UploadPayloadError so the outbox
+ * can dead-letter it instead of retrying a corrupt payload forever.
  */
 export async function buildMenuItemWritePayload(
   item: MenuItem,
@@ -51,27 +93,46 @@ export async function buildMenuItemWritePayload(
     return record;
   }
 
-  const form = new FormData();
-  // Uploading a fresh file replaces the old PB file and stale external URL.
-  for (const [key, value] of Object.entries({ ...record, image_url: '' })) {
-    form.append(key, serializeFormValue(value));
-  }
+  try {
+    if (await isLocalImageMissing(item.imageUrl)) {
+      throw new UploadPayloadError(
+        'The attached photo is no longer available on this device. Re-attach the image and save again.'
+      );
+    }
 
-  if (Platform.OS === 'web') {
-    const response = await fetch(item.imageUrl);
-    if (!response.ok) throw new Error('Unable to read the selected menu image.');
-    const blob = await response.blob();
-    form.append('image', blob, imageFileName(item));
-  } else {
-    form.append(
-      'image',
-      {
-        uri: item.imageUrl,
-        name: imageFileName(item),
-        type: imageMimeType(item.imageUrl),
-      } as unknown as Blob
+    const form = new FormData();
+    // Uploading a fresh file replaces the old PB file and stale external URL.
+    for (const [key, value] of Object.entries({ ...record, image_url: '' })) {
+      form.append(key, serializeFormValue(value));
+    }
+
+    if (Platform.OS === 'web') {
+      const response = await fetch(item.imageUrl);
+      if (!response.ok) {
+        throw new UploadPayloadError('Unable to read the selected menu image.');
+      }
+      const blob = await response.blob();
+      form.append('image', blob, imageFileName(item));
+    } else {
+      // RN's native multipart format; the boundary header is set by the fetch
+      // layer, so it must never be supplied manually here.
+      form.append(
+        'image',
+        {
+          uri: item.imageUrl,
+          name: imageFileName(item),
+          type: imageMimeType(item.imageUrl),
+        } as unknown as Blob
+      );
+    }
+
+    return form;
+  } catch (error) {
+    if (error instanceof UploadPayloadError) throw error;
+    throw new UploadPayloadError(
+      `The menu photo could not be packaged for upload: ${
+        error instanceof Error ? error.message : String(error)
+      }`
     );
   }
-
-  return form;
 }

@@ -13,6 +13,7 @@ import { AppState as NativeAppState } from 'react-native';
 import { router } from 'expo-router';
 import { BRANCHES } from '../constants/branches';
 import { buildOutboxEntry, buildSimulatedOrder, sortOutboxChronologically } from '../lib/domain';
+import { incomingOrderStoreName } from '../lib/branchLabel';
 import { normalizeTerminalSettings } from '../lib/settings';
 import {
   createDefaultTerminalSettings,
@@ -25,6 +26,7 @@ import {
 } from '../lib/seed';
 import * as db from '../db/sqlite';
 import { startAlertToneLoop, stopAlertTone } from '../services/alertTones';
+import { dismissOrderAlarm, presentOrderAlarm } from '../services/orderAlarm';
 import {
   addPickupPushListeners,
   clearTerminalPushToken,
@@ -92,6 +94,7 @@ export interface SyncDiagnosticsReport {
   queue: { pending: number; actions: string[] };
   result: { synced: number; failed: number };
   failures: Array<{
+    entryId: string;
     actionType: string;
     label: string;
     kind: string;
@@ -146,6 +149,8 @@ interface AppContextValue {
   /** Owner console: reload every branch's orders and reservations. */
   refreshOwnerData: (options?: { silent?: boolean }) => Promise<void>;
   clearOutbox: () => Promise<void>;
+  /** Drop only the named rejected entries; the rest of the queue stays live. */
+  discardOutboxEntries: (ids: string[]) => Promise<void>;
   runSyncDiagnostics: () => Promise<SyncDiagnosticsReport>;
   setConnectionStatus: (status: ConnectionStatus) => void;
   setBranch: (branch: Branch) => Promise<void>;
@@ -501,6 +506,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
   ]);
 
   useEffect(() => () => stopAlertTone(), []);
+
+  // Lock-screen / background alarm engine: while a call is unacknowledged and
+  // the terminal is not foregrounded, a full-screen intent notification forces
+  // the incoming-order screen over the keyguard (native OrderAlarm module).
+  // Answering/rejecting clears the call, which dismisses the notification.
+  useEffect(() => {
+    if (!activeIncomingCall) {
+      void dismissOrderAlarm();
+      return;
+    }
+    const alarm = {
+      orderId: activeIncomingCall.id,
+      title: 'Incoming pickup order',
+      body: `${activeIncomingCall.customerName} · ${activeIncomingCall.orderNumber}`,
+    };
+    if (NativeAppState.currentState !== 'active') {
+      void presentOrderAlarm(alarm);
+    }
+    const subscription = NativeAppState.addEventListener('change', (next) => {
+      if (next !== 'active') void presentOrderAlarm(alarm);
+    });
+    return () => subscription.remove();
+  }, [activeIncomingCall]);
 
   const applyBranchSnapshot = useCallback(
     (branchId: string, snapshot: BranchSnapshot): void => {
@@ -1282,6 +1310,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       if (result.failedIds.length > 0) {
+        // Keep the in-memory count in step with SQLite so the retry ceiling in
+        // flushOutbox applies within a session, not only after a restart.
+        dispatch({ type: 'RETRY_OUTBOX', ids: result.failedIds });
         await Promise.all(
           result.failedIds.map((id) =>
             db.incrementOutboxRetry(id).catch(() => undefined)
@@ -1480,6 +1511,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /**
+   * Surgical alternative to CLEAR STUCK QUEUE: remove only the entries the
+   * user chose to give up on, keeping every other pending mutation intact.
+   */
+  const discardOutboxEntries = useCallback(async (ids: string[]): Promise<void> => {
+    if (ids.length === 0) return;
+    dispatch({ type: 'DISCARD_OUTBOX', ids });
+    lastSyncFailuresRef.current = lastSyncFailuresRef.current.filter(
+      (failure) => !ids.includes(failure.entryId)
+    );
+    try {
+      await db.deleteOutboxEntries(ids);
+    } catch (error) {
+      console.warn('Unable to remove discarded outbox actions', error);
+    }
+    console.warn(`[sync] user discarded ${ids.length} rejected action(s)`);
+  }, []);
+
+  /**
    * Force-flushes the queue and prints the exact PocketBase rejection for every
    * entry: URL, auth state, role, branch, HTTP status, server message and the
    * per-field validation detail. Returned so the UI can show the same report.
@@ -1516,6 +1565,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         pendingEntries.length === 0
           ? []
           : lastSyncFailuresRef.current.map((failure) => ({
+              entryId: failure.entryId,
               actionType: failure.actionType,
               label: failure.label,
               kind: failure.error.kind,
@@ -1673,6 +1723,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       refreshData,
       refreshOwnerData,
       clearOutbox,
+      discardOutboxEntries,
       runSyncDiagnostics,
       setConnectionStatus,
       setBranch,
@@ -1706,6 +1757,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       refreshData,
       refreshOwnerData,
       clearOutbox,
+      discardOutboxEntries,
       runSyncDiagnostics,
       setConnectionStatus,
       setBranch,
@@ -1729,6 +1781,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       {isOwner ? null : (
         <IncomingOrderCallModal
           order={rejectingOrder ? null : activeIncomingCall}
+          storeName={incomingOrderStoreName(
+            activeIncomingCall,
+            state.branches,
+            state.activeBranch
+          )}
           onAccept={acceptIncomingCall}
           onReject={requestRejectIncomingCall}
         />

@@ -118,6 +118,23 @@ export function branchDisplayName(
   return `${name} ${SEPARATOR} ${city}`;
 }
 
+/**
+ * Store name for the incoming-order alarm header. The order's own branchId is
+ * authoritative (multi-branch EDK); single-unit terminals fall back to their
+ * active branch resolved from the staff session.
+ */
+export function incomingOrderStoreName(
+  order: { branchId?: string } | null,
+  branches: Branch[],
+  activeBranch: Branch
+): string {
+  const branch =
+    (order?.branchId
+      ? branches.find((entry) => entry.id === order.branchId)
+      : undefined) ?? activeBranch;
+  return branchDisplayName(branch);
+}
+
 /** Secondary line: street address when known, otherwise the branch code. */
 export function branchDisplayMeta(branch: Pick<Branch, 'code' | 'address'>): string {
   const address = cleanText(branch.address ?? '');

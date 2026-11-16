@@ -72,4 +72,15 @@ describe('describePocketBaseError', () => {
     expect(described.kind).toBe('not-found');
     expect(describeSyncHint(described)).toContain('does not exist');
   });
+
+  it('classifies an unreadable local photo as a permanent payload error', () => {
+    const uploadError = Object.assign(
+      new Error('The attached photo is no longer available on this device.'),
+      { name: 'UploadPayloadError', status: 0 }
+    );
+    const described = describePocketBaseError(uploadError);
+
+    expect(described.kind).toBe('payload');
+    expect(describeSyncHint(described)).toContain('no longer available');
+  });
 });

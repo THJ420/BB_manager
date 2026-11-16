@@ -3,6 +3,10 @@ import Constants from 'expo-constants';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import {
+  checkFullScreenIntentAccess,
+  openFullScreenIntentSettings,
+} from './orderAlarm';
 
 const STORAGE_KEY = 'bb.backgroundPermissions.v1';
 const SNOOZE_MS = 24 * 60 * 60 * 1000;
@@ -54,6 +58,7 @@ export async function snoozeBackgroundRationale(now = Date.now()): Promise<void>
 export interface BackgroundPermissionResult {
   notifications: 'granted' | 'denied';
   batteryExemption: 'requested' | 'settings-opened' | 'unsupported';
+  fullScreenIntent: 'granted' | 'settings-opened' | 'unsupported';
 }
 
 function androidPackage(): string {
@@ -102,7 +107,18 @@ export async function requestBackgroundPermissions(): Promise<BackgroundPermissi
     }
   }
 
-  return { notifications, batteryExemption };
+  let fullScreenIntent: BackgroundPermissionResult['fullScreenIntent'] = 'unsupported';
+  if (Platform.OS === 'android') {
+    const access = checkFullScreenIntentAccess();
+    if (access === 'granted') {
+      fullScreenIntent = 'granted';
+    } else if (access === 'needs-settings') {
+      // Android 14+: the user must allow "Full screen notifications" once.
+      fullScreenIntent = openFullScreenIntentSettings() ? 'settings-opened' : 'unsupported';
+    }
+  }
+
+  return { notifications, batteryExemption, fullScreenIntent };
 }
 
 /** Management entry: opens the system app-info page for this terminal. */

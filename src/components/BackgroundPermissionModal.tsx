@@ -120,6 +120,16 @@ export function BackgroundPermissionModal({
                   : 'This device does not expose the battery-optimisation dialog. Keep the app open during service.'
             }
           />
+          {result.fullScreenIntent !== 'unsupported' ? (
+            <ResultRow
+              ok={result.fullScreenIntent === 'granted'}
+              label={
+                result.fullScreenIntent === 'granted'
+                  ? 'Lock-screen popups allowed — order alarms open over the lock screen.'
+                  : 'Allow “Full screen notifications” for BB Manager in the settings page that just opened so orders pop up over the lock screen.'
+              }
+            />
+          ) : null}
           <Text style={styles.note}>
             You can review these choices any time in Terminal Settings → Background & Alarm
             Reliability.
@@ -139,8 +149,9 @@ export function BackgroundPermissionModal({
             </View>
           ))}
           <Text style={styles.note}>
-            “Enable protections” asks for notification permission and opens the system
-            battery-optimisation dialog. Nothing else on this device is changed.
+            “Enable protections” asks for notification permission, opens the system
+            battery-optimisation dialog and, on Android 14+, the full-screen notification
+            access page. Nothing else on this device is changed.
           </Text>
         </View>
       )}

@@ -42,7 +42,7 @@ module.exports = {
   expo: {
     name: 'BB Manager',
     slug: 'bb-manager',
-    version: '1.5.0',
+    version: '1.5.1',
     orientation: 'default',
     scheme: 'bbmanager',
     userInterfaceStyle: 'dark',
@@ -84,6 +84,10 @@ module.exports = {
         // Lets the first-launch flow offer the battery-optimisation exemption
         // so Doze cannot silence incoming-order alarms.
         'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
+        // Full-screen intent notifications launch the incoming-order alarm
+        // over the lock screen; SYSTEM_ALERT_WINDOW covers overlay fallback.
+        'android.permission.USE_FULL_SCREEN_INTENT',
+        'android.permission.SYSTEM_ALERT_WINDOW',
         // Required to launch the APK installer for in-app GitHub updates.
         'android.permission.REQUEST_INSTALL_PACKAGES',
       ],
@@ -95,6 +99,7 @@ module.exports = {
     },
     plugins: [
       'expo-router',
+      './plugins/withLockScreenAlarm',
       [
         'expo-sqlite',
         {

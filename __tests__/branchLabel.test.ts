@@ -4,7 +4,9 @@ import {
   branchDisplayName,
   branchSearchKey,
   decodeHtmlEntities,
+  incomingOrderStoreName,
 } from '../src/lib/branchLabel';
+import { Branch } from '../src/types';
 
 describe('decodeHtmlEntities', () => {
   it('decodes numeric, hex and named entities', () => {
@@ -257,5 +259,67 @@ describe('branchSearchKey', () => {
       expect(haystack).toContain(branchSearchKey(code));
       expect(haystack).toContain(branchSearchKey(name.split(' ').pop() ?? ''));
     }
+  });
+});
+
+describe('incomingOrderStoreName', () => {
+  const branch = (overrides: Partial<Branch>): Branch => ({
+    id: 'branch_1',
+    name: 'Enjoy Doner Kebab Mosina',
+    code: 'EDK-MOSINA',
+    address: 'Poznańska 3 62-050 Mosina',
+    phone: '',
+    isActive: true,
+    ...overrides,
+  });
+
+  const radhuni = branch({
+    id: 'branch_rad',
+    name: 'Radhuni 2.0',
+    code: 'RAD-LESZNO',
+    address: '',
+  });
+  const crispy = branch({
+    id: 'branch_cc',
+    name: 'Crispy Chicken',
+    code: 'CC-POZNAN',
+    address: 'Głogowska 86/4, 60-262 Poznań',
+  });
+  const edkPoznan = branch({
+    id: 'branch_edk_poz',
+    name: 'Enjoy Doner Kebab Poznan',
+    code: 'EDK-POZNAN',
+    address: 'ul.Głogowska 142 60-205 Poznan',
+  });
+  const mosina = branch({});
+  const directory = [radhuni, crispy, edkPoznan, mosina];
+
+  it('resolves a Crispy Chicken order even on a Radhuni-active terminal', () => {
+    expect(
+      incomingOrderStoreName({ branchId: 'branch_cc' }, directory, radhuni)
+    ).toBe('Crispy Chicken – Poznań');
+  });
+
+  it('resolves the correct EDK branch among many', () => {
+    expect(
+      incomingOrderStoreName({ branchId: 'branch_edk_poz' }, directory, radhuni)
+    ).toBe('Enjoy Doner Kebab – Poznan');
+    expect(
+      incomingOrderStoreName({ branchId: 'branch_1' }, directory, crispy)
+    ).toBe('Enjoy Doner Kebab – Mosina');
+  });
+
+  it('resolves a single-unit Radhuni order', () => {
+    expect(
+      incomingOrderStoreName({ branchId: 'branch_rad' }, directory, radhuni)
+    ).toBe('Radhuni 2.0 – Leszno');
+  });
+
+  it('falls back to the active branch when the order branch is unknown or absent', () => {
+    expect(
+      incomingOrderStoreName({ branchId: 'missing' }, directory, crispy)
+    ).toBe('Crispy Chicken – Poznań');
+    expect(incomingOrderStoreName({}, directory, radhuni)).toBe('Radhuni 2.0 – Leszno');
+    expect(incomingOrderStoreName(null, directory, radhuni)).toBe('Radhuni 2.0 – Leszno');
   });
 });

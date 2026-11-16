@@ -87,6 +87,7 @@ export type AppAction =
   | { type: 'SET_SETTINGS'; settings: TerminalSettings }
   | { type: 'ADD_OUTBOX'; entry: OutboxEntry }
   | { type: 'SYNC_OUTBOX'; ids: string[]; syncedAt: number }
+  | { type: 'RETRY_OUTBOX'; ids: string[] }
   | { type: 'DISCARD_OUTBOX'; ids: string[] }
   | { type: 'CLEAR_OUTBOX' };
 
@@ -343,6 +344,16 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const remaining = state.outbox.filter((entry) => !action.ids.includes(entry.id));
       return { ...state, outbox: remaining, lastSyncedAt: action.syncedAt };
     }
+
+    case 'RETRY_OUTBOX':
+      return {
+        ...state,
+        outbox: state.outbox.map((entry) =>
+          action.ids.includes(entry.id)
+            ? { ...entry, retryCount: entry.retryCount + 1 }
+            : entry
+        ),
+      };
 
     case 'DISCARD_OUTBOX':
       return {

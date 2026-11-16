@@ -1,9 +1,14 @@
 {
   "name": "bb-manager",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "private": true,
   "description": "Multi-branch restaurant pickup, menu, floor and terminal operations app built with Expo + React Native",
   "main": "expo-router/entry",
+  "expo": {
+    "autolinking": {
+      "nativeModulesDir": "./modules"
+    }
+  },
   "scripts": {
     "start": "expo start --dev-client",
     "android": "expo run:android",

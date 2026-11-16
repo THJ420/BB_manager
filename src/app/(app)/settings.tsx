@@ -55,6 +55,7 @@ export default function TerminalSettingsScreen() {
     saveTerminalSettings,
     syncOutboxNow,
     clearOutbox,
+    discardOutboxEntries,
     runSyncDiagnostics,
     setConnectionStatus,
     setBranch,
@@ -255,6 +256,12 @@ export default function TerminalSettingsScreen() {
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  const handleDiscardRejected = async () => {
+    const ids = (diagnostics?.failures ?? []).map((failure) => failure.entryId);
+    setDiagnosticsVisible(false);
+    if (ids.length > 0) await discardOutboxEntries(ids);
   };
 
   const handleLogout = async () => {
@@ -1106,7 +1113,18 @@ export default function TerminalSettingsScreen() {
         title="Sync Diagnostics"
         message="Server response for the queued actions"
         onRequestClose={() => setDiagnosticsVisible(false)}
-        actions={[{ label: 'Close', onPress: () => setDiagnosticsVisible(false) }]}
+        actions={[
+          ...(diagnostics && diagnostics.failures.length > 0
+            ? [
+                {
+                  label: 'Discard rejected',
+                  variant: 'danger' as const,
+                  onPress: () => void handleDiscardRejected(),
+                },
+              ]
+            : []),
+          { label: 'Close', onPress: () => setDiagnosticsVisible(false) },
+        ]}
       >
         {diagnostics ? (
           <View style={styles.diagnosticsBody}>
@@ -1141,7 +1159,7 @@ export default function TerminalSettingsScreen() {
             ) : (
               diagnostics.failures.slice(0, 4).map((failure) => (
                 <Text
-                  key={`${failure.actionType}-${failure.label}`}
+                  key={failure.entryId}
                   style={styles.diagError}
                 >
                   {failure.actionType}: {failure.kind} {failure.status} — {failure.hint}

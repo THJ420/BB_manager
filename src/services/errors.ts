@@ -38,6 +38,7 @@ export type PocketBaseErrorKind =
   | 'forbidden'
   | 'rule'
   | 'validation'
+  | 'payload'
   | 'not-found'
   | 'conflict'
   | 'network'
@@ -115,7 +116,12 @@ export function describePocketBaseError(error: unknown): DescribedPocketBaseErro
   const detail = fieldDetail || raw;
 
   let kind: PocketBaseErrorKind = 'unknown';
-  if (source.name === 'BranchScopeError') {
+  if (source.name === 'UploadPayloadError') {
+    // A local photo that cannot be read/serialized never becomes valid on
+    // retry; without this branch RN surfaces it as a status-0 "network" error
+    // and the outbox retried it forever.
+    kind = 'payload';
+  } else if (source.name === 'BranchScopeError') {
     // Raised locally before any HTTP call; the entry names another branch.
     kind = 'forbidden';
   } else if (source.isAbort === true) {
@@ -156,6 +162,8 @@ export function describeSyncHint(error: DescribedPocketBaseError): string {
       return 'Blocked by PocketBase collection rules — check the account role and branch_id.';
     case 'validation':
       return error.detail || error.message;
+    case 'payload':
+      return error.message || 'The attached photo could not be read; re-attach it and save again.';
     case 'not-found':
       return 'The record does not exist in PocketBase; its create likely failed first.';
     case 'network':
