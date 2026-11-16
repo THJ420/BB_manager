@@ -54,6 +54,8 @@ export interface DescribedPocketBaseError {
   data: Record<string, unknown>;
   /** Raw transport error (Android: "TypeError: Network request failed"). */
   raw: string;
+  /** Exact JS stack of the thrown error (or its wrapped original/cause). */
+  stack: string;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -115,6 +117,13 @@ export function describePocketBaseError(error: unknown): DescribedPocketBaseErro
 
   const detail = fieldDetail || raw;
 
+  // The exact throw site: prefer the SDK error's own stack, then the wrapped
+  // originalError / ES2022 cause (UploadPayloadError keeps the reader failure
+  // there). Surfaced verbatim in sync logs and the diagnostics report.
+  const cause = asRecord(source.cause);
+  const stack = [source.stack, original.stack, cause.stack]
+    .find((value) => typeof value === 'string' && value !== '') as string | undefined;
+
   let kind: PocketBaseErrorKind = 'unknown';
   if (source.name === 'UploadPayloadError') {
     // A local photo that cannot be read/serialized never becomes valid on
@@ -144,7 +153,7 @@ export function describePocketBaseError(error: unknown): DescribedPocketBaseErro
     kind = 'validation';
   }
 
-  return { kind, status, message, detail, url, data, raw };
+  return { kind, status, message, detail, url, data, raw, stack: stack ?? '' };
 }
 
 export function isAuthFailure(error: DescribedPocketBaseError): boolean {

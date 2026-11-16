@@ -83,4 +83,44 @@ describe('describePocketBaseError', () => {
     expect(described.kind).toBe('payload');
     expect(describeSyncHint(described)).toContain('no longer available');
   });
+
+  it('captures the exact throw-site stack of the thrown error', () => {
+    const error = Object.assign(new Error('boom'), {
+      status: 400,
+      stack: 'Error: boom\n    at buildMenuItemWritePayload (uploads.ts:155:13)',
+    });
+    expect(describePocketBaseError(error).stack).toBe(error.stack);
+  });
+
+  it('falls back to the wrapped originalError stack', () => {
+    const original = Object.assign(new TypeError('Network request failed'), {
+      stack: 'TypeError: Network request failed\n    at fetch (native)',
+    });
+    const described = describePocketBaseError({
+      status: 0,
+      message: 'Something went wrong while processing your request.',
+      response: {},
+      originalError: original,
+    });
+    expect(described.stack).toBe(original.stack);
+  });
+
+  it('falls back to the ES2022 cause stack kept by UploadPayloadError', () => {
+    const reader = Object.assign(new Error('EACCES: permission denied'), {
+      stack: 'Error: EACCES: permission denied\n    at readAsStringAsync (native)',
+    });
+    const wrapper = Object.assign(new Error('The menu photo could not be packaged for upload.'), {
+      name: 'UploadPayloadError',
+      status: 0,
+      cause: reader,
+    });
+    delete (wrapper as { stack?: string }).stack;
+    const described = describePocketBaseError(wrapper);
+    expect(described.kind).toBe('payload');
+    expect(described.stack).toBe(reader.stack);
+  });
+
+  it('reports an empty stack when the rejection carries none', () => {
+    expect(describePocketBaseError(pbError(404, { message: 'Not found.' })).stack).toBe('');
+  });
 });

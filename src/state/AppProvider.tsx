@@ -107,6 +107,7 @@ export interface SyncDiagnosticsReport {
     message: string;
     detail: string;
     hint: string;
+    stack: string;
   }>;
   discarded: Array<{
     actionType: string;
@@ -114,6 +115,8 @@ export interface SyncDiagnosticsReport {
     kind: string;
     status: number;
     message: string;
+    detail: string;
+    stack: string;
   }>;
 }
 
@@ -1589,6 +1592,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               message: failure.error.message,
               detail: failure.error.detail,
               hint: describeSyncHint(failure.error),
+              stack: failure.error.stack,
             })),
       discarded: lastDiscardedRef.current.map((failure) => ({
         actionType: failure.actionType,
@@ -1596,6 +1600,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         kind: failure.error.kind,
         status: failure.error.status,
         message: failure.error.message,
+        detail: failure.error.detail,
+        stack: failure.error.stack,
       })),
     };
 

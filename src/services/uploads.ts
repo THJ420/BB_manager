@@ -9,9 +9,12 @@ import { isLocalImageUri, toMenuItemRecord } from './mappers';
  * of retrying it forever (which previously jammed the whole queue).
  */
 export class UploadPayloadError extends Error {
-  constructor(message: string) {
+  constructor(message: string, options?: { cause?: unknown }) {
     super(message);
     this.name = 'UploadPayloadError';
+    if (options?.cause !== undefined) {
+      this.cause = options.cause;
+    }
   }
 }
 
@@ -169,7 +172,8 @@ export async function buildMenuItemWritePayload(
     throw new UploadPayloadError(
       `The menu photo could not be packaged for upload: ${
         error instanceof Error ? error.message : String(error)
-      }`
+      }`,
+      { cause: error }
     );
   }
 }

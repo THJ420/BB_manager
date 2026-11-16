@@ -128,12 +128,15 @@ describe('buildMenuItemWritePayload', () => {
   });
 
   it('wraps an unreadable local photo as a permanent UploadPayloadError', async () => {
-    readMock.mockRejectedValue(new Error('EACCES: permission denied'));
+    const readerError = new Error('EACCES: permission denied');
+    readMock.mockRejectedValue(readerError);
     const item = itemWithImage('file:///data/cache/locked.jpg');
 
-    await expect(buildMenuItemWritePayload(item)).rejects.toBeInstanceOf(
-      UploadPayloadError
-    );
+    const error = await buildMenuItemWritePayload(item).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(UploadPayloadError);
+    // The original reader failure stays attached so diagnostics can print its
+    // exact stack instead of only the wrapper message.
+    expect((error as { cause?: unknown }).cause).toBe(readerError);
   });
 
   it('throws a permanent UploadPayloadError when the local file is gone', async () => {

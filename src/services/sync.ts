@@ -495,7 +495,8 @@ export async function flushOutbox(entries: OutboxEntry[]): Promise<FlushResult> 
             ` | message=${described.message}` +
             (described.detail ? ` | detail=${described.detail}` : '') +
             (described.url ? ` | url=${described.url}` : '') +
-            ` | removed from queue (permanent)`
+            ` | removed from queue (permanent)` +
+            (described.stack ? `\n[sync] stack:\n${described.stack}` : '')
         );
         continue;
       }
@@ -509,7 +510,8 @@ export async function flushOutbox(entries: OutboxEntry[]): Promise<FlushResult> 
           ` | message=${described.message}` +
           (described.detail ? ` | detail=${described.detail}` : '') +
           (described.url ? ` | url=${described.url}` : '') +
-          ` | hint=${describeSyncHint(described)}`
+          ` | hint=${describeSyncHint(described)}` +
+          (described.stack ? `\n[sync] stack:\n${described.stack}` : '')
       );
       failedIds.push(entry.id);
     }
