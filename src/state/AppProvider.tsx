@@ -60,8 +60,10 @@ import { runNetworkProbe, NetworkProbeResult } from '../services/networkProbe';
 import { fetchBranchSnapshot, fetchOwnerSnapshot, BranchSnapshot } from '../services/data';
 import { IncomingOrderCallModal } from '../components/IncomingOrderCallModal';
 import { AppUpdatePrompt } from '../components/AppUpdatePrompt';
+import { BackgroundPermissionModal } from '../components/BackgroundPermissionModal';
 import { RejectOrderModal } from '../components/RejectOrderModal';
 import { checkForUpdate, ReleaseInfo, UpdateCheck } from '../services/updater';
+import { shouldShowBackgroundRationale } from '../services/backgroundPermissions';
 import {
   Branch,
   ConnectionStatus,
@@ -225,6 +227,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [updateRelease, setUpdateRelease] = useState<ReleaseInfo | null>(null);
   const [updatePromptVisible, setUpdatePromptVisible] = useState(false);
   const [checkingAppUpdate, setCheckingAppUpdate] = useState(false);
+  const [backgroundRationaleVisible, setBackgroundRationaleVisible] = useState(false);
   const updateCheckPromiseRef = useRef<Promise<UpdateCheck> | null>(null);
   const activeIncomingCall = incomingCalls[0] ?? null;
   const isOwner = state.session?.role === 'owner';
@@ -872,6 +875,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (state.session.role === 'owner') return;
     void registerTerminalPushToken(state.session.id);
   }, [state.hydrated, state.session?.id, state.session?.role]);
+
+  // First-launch rationale: explain why background access + wake locks keep
+  // incoming-order alarms ringing, then let staff grant the permissions. The
+  // service gates on Android and a persisted completed/snoozed flag.
+  useEffect(() => {
+    if (!state.hydrated || !state.session) return;
+    let cancelled = false;
+    void shouldShowBackgroundRationale().then((show) => {
+      if (!cancelled && show) setBackgroundRationaleVisible(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [state.hydrated, state.session?.id]);
 
   // Tapping a pickup push opens the live board; receiving one while the app is
   // running forces a reconcile so the ticket is on screen before the alarm.
@@ -1704,6 +1721,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         release={updateRelease}
         visible={updatePromptVisible}
         onDismiss={() => setUpdatePromptVisible(false)}
+      />
+      <BackgroundPermissionModal
+        visible={backgroundRationaleVisible && !activeIncomingCall && !rejectingOrder}
+        onDismiss={() => setBackgroundRationaleVisible(false)}
       />
       {isOwner ? null : (
         <IncomingOrderCallModal

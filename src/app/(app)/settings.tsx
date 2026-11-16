@@ -1,9 +1,10 @@
 import { Redirect, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActionButton } from '../../components/ActionButton';
 import { AlertTonePickerModal } from '../../components/AlertTonePickerModal';
+import { BackgroundPermissionModal } from '../../components/BackgroundPermissionModal';
 import { ConnectionBadge } from '../../components/ConnectionBadge';
 import { DialogModal } from '../../components/DialogModal';
 import { ScreenHeader } from '../../components/ScreenHeader';
@@ -19,6 +20,7 @@ import { storeHoursSummary } from '../../lib/domain';
 import { branchDisplayName } from '../../lib/branchLabel';
 import { initials, roleLabel } from '../../lib/format';
 import { currentAppVersion } from '../../services/updater';
+import { openAppPermissionSettings } from '../../services/backgroundPermissions';
 import { useApp } from '../../state/AppProvider';
 import type { SyncDiagnosticsReport } from '../../state/AppProvider';
 import { Colors, Layout, Radius, Spacing } from '../../theme/colors';
@@ -61,6 +63,7 @@ export default function TerminalSettingsScreen() {
   const [draft, setDraft] = useState<TerminalSettings>(state.settings);
   const [weeklyVisible, setWeeklyVisible] = useState(false);
   const [tonePickerVisible, setTonePickerVisible] = useState(false);
+  const [backgroundPermissionsVisible, setBackgroundPermissionsVisible] = useState(false);
   const [savedVisible, setSavedVisible] = useState(false);
   const [logoutVisible, setLogoutVisible] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -489,6 +492,35 @@ export default function TerminalSettingsScreen() {
             terminal.
           </Text>
         </SectionCard>
+
+        {Platform.OS === 'android' ? (
+        <SectionCard title="BACKGROUND & ALARM RELIABILITY">
+          <Text style={styles.bodyText}>
+            Incoming online orders must ring instantly even when the screen is off or staff are
+            using other apps. Grant background access and exempt BB Manager from battery
+            optimisation so no ticket is ever missed.
+          </Text>
+          <ActionButton
+            label="🔔  REVIEW BACKGROUND PERMISSIONS"
+            variant="primary"
+            fullWidth
+            onPress={() => setBackgroundPermissionsVisible(true)}
+            testID="btn_background_permissions"
+          />
+          <ActionButton
+            label="OPEN SYSTEM APP SETTINGS"
+            variant="outline"
+            compact
+            onPress={() => void openAppPermissionSettings()}
+            testID="btn_open_system_app_settings"
+            style={styles.diagnosticsButton}
+          />
+          <Text style={styles.rowSubtitle}>
+            Manage notifications, battery optimisation and autostart from the system app-info
+            page.
+          </Text>
+        </SectionCard>
+        ) : null}
 
         {isOwner ? (
         <SectionCard title="SMTP EMAIL CONFIGURATION">
@@ -1032,6 +1064,11 @@ export default function TerminalSettingsScreen() {
           setTonePickerVisible(false);
           persistSoundSettings({ alertToneId: toneId });
         }}
+      />
+
+      <BackgroundPermissionModal
+        visible={backgroundPermissionsVisible}
+        onDismiss={() => setBackgroundPermissionsVisible(false)}
       />
 
       <WeeklyHoursModal

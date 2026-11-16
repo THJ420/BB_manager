@@ -42,7 +42,7 @@ module.exports = {
   expo: {
     name: 'BB Manager',
     slug: 'bb-manager',
-    version: '1.4.6',
+    version: '1.5.0',
     orientation: 'default',
     scheme: 'bbmanager',
     userInterfaceStyle: 'dark',
@@ -78,6 +78,12 @@ module.exports = {
         'android.permission.VIBRATE',
         'android.permission.WAKE_LOCK',
         'android.permission.RECEIVE_BOOT_COMPLETED',
+        // Base foreground-service permission; expo-audio adds the
+        // FOREGROUND_SERVICE_MEDIA_PLAYBACK subtype for the alarm loop.
+        'android.permission.FOREGROUND_SERVICE',
+        // Lets the first-launch flow offer the battery-optimisation exemption
+        // so Doze cannot silence incoming-order alarms.
+        'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
         // Required to launch the APK installer for in-app GitHub updates.
         'android.permission.REQUEST_INSTALL_PACKAGES',
       ],
