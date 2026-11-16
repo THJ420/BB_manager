@@ -72,6 +72,40 @@ export async function isLocalImageMissing(uri: string): Promise<boolean> {
   }
 }
 
+const BASE64_ALPHABET =
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+function decodeBase64ToBytes(input: string): Uint8Array {
+  const clean = input.replace(/[^A-Za-z0-9+/]/g, '');
+  const bytes = new Uint8Array(Math.floor((clean.length * 3) / 4));
+  let buffer = 0;
+  let bits = 0;
+  let written = 0;
+  for (const char of clean) {
+    buffer = (buffer << 6) | BASE64_ALPHABET.indexOf(char);
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      bytes[written++] = (buffer >> bits) & 0xff;
+    }
+  }
+  return bytes.subarray(0, written);
+}
+
+async function readLocalImageBytes(uri: string): Promise<Uint8Array> {
+  if (uri.startsWith('data:')) {
+    const comma = uri.indexOf(',');
+    if (comma === -1) {
+      throw new UploadPayloadError('Unable to read the selected menu image.');
+    }
+    return decodeBase64ToBytes(uri.slice(comma + 1));
+  }
+  const base64 = await FileSystem.readAsStringAsync(uri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  return decodeBase64ToBytes(base64);
+}
+
 /**
  * Creates either JSON or multipart record data. Picked dish photos are uploaded
  * to the PocketBase `image` file field; existing URLs stay in `image_url`.
@@ -114,14 +148,17 @@ export async function buildMenuItemWritePayload(
       const blob = await response.blob();
       form.append('image', blob, imageFileName(item));
     } else {
-      // RN's native multipart format; the boundary header is set by the fetch
-      // layer, so it must never be supplied manually here.
+      // Expo SDK 58's fetch serializes multipart itself and only accepts
+      // strings, Blobs or parts exposing bytes(). RN's classic {uri} notation
+      // throws "Unsupported FormDataPart implementation", so the file is read
+      // into memory and appended as a bytes() part with an explicit MIME/name.
+      const bytes = await readLocalImageBytes(item.imageUrl);
       form.append(
         'image',
         {
-          uri: item.imageUrl,
           name: imageFileName(item),
           type: imageMimeType(item.imageUrl),
+          bytes: async () => bytes,
         } as unknown as Blob
       );
     }

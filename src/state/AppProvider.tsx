@@ -26,7 +26,12 @@ import {
 } from '../lib/seed';
 import * as db from '../db/sqlite';
 import { startAlertToneLoop, stopAlertTone } from '../services/alertTones';
-import { dismissOrderAlarm, presentOrderAlarm } from '../services/orderAlarm';
+import {
+  dismissOrderAlarm,
+  presentOrderAlarm,
+  startOrderAlarmLoop,
+  stopOrderAlarmLoop,
+} from '../services/orderAlarm';
 import {
   addPickupPushListeners,
   clearTerminalPushToken,
@@ -489,13 +494,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ) {
       alertLoopToneRef.current = null;
       stopAlertTone();
+      stopOrderAlarmLoop();
       return;
     }
 
     const toneId = state.settings.alertToneId;
     if (alertLoopToneRef.current === toneId) return;
     alertLoopToneRef.current = toneId;
-    void startAlertToneLoop(toneId);
+    // The native engine loops gaplessly and vibrates continuously; expo-audio
+    // is only the fallback for builds without the module (Expo Go, web).
+    if (!startOrderAlarmLoop(toneId)) {
+      void startAlertToneLoop(toneId);
+    }
   }, [
     state.hydrated,
     state.session?.role,
@@ -505,7 +515,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     state.settings.alertToneId,
   ]);
 
-  useEffect(() => () => stopAlertTone(), []);
+  useEffect(
+    () => () => {
+      stopAlertTone();
+      stopOrderAlarmLoop();
+    },
+    []
+  );
 
   // Lock-screen / background alarm engine: while a call is unacknowledged and
   // the terminal is not foregrounded, a full-screen intent notification forces

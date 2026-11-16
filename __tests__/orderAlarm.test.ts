@@ -28,6 +28,8 @@ const requireNativeMock = requireNativeModule as jest.Mock;
 const nativeStub = {
   present: jest.fn(() => true),
   dismiss: jest.fn(),
+  startLoop: jest.fn(() => true),
+  stopLoop: jest.fn(),
   canUseFullScreenIntent: jest.fn(() => true),
   openFullScreenIntentSettings: jest.fn(() => true),
 };
@@ -53,6 +55,7 @@ beforeEach(() => {
   (Platform as { OS: string }).OS = 'android';
   requireNativeMock.mockReturnValue(nativeStub);
   nativeStub.present.mockReturnValue(true);
+  nativeStub.startLoop.mockReturnValue(true);
   nativeStub.canUseFullScreenIntent.mockReturnValue(true);
   nativeStub.openFullScreenIntentSettings.mockReturnValue(true);
 });
@@ -126,6 +129,48 @@ describe('dismissOrderAlarm', () => {
     await service.dismissOrderAlarm();
 
     expect(Notifications.dismissAllNotificationsAsync).toHaveBeenCalled();
+  });
+});
+
+describe('continuous alarm loop', () => {
+  it('starts the native gapless loop with the configured tone', () => {
+    const service = loadService();
+    expect(service.startOrderAlarmLoop('loud_alarm')).toBe(true);
+    expect(nativeStub.startLoop).toHaveBeenCalledWith('loud_alarm');
+  });
+
+  it('reports failure so callers can fall back to expo-audio', () => {
+    nativeStub.startLoop.mockReturnValue(false);
+    const service = loadService();
+    expect(service.startOrderAlarmLoop('loud_alarm')).toBe(false);
+  });
+
+  it('reports failure when the native module is absent or throws', () => {
+    requireNativeMock.mockImplementation(() => {
+      throw new Error('missing');
+    });
+    const service = loadService();
+    expect(service.startOrderAlarmLoop('loud_alarm')).toBe(false);
+    expect(service.stopOrderAlarmLoop()).toBeUndefined();
+  });
+
+  it('stops the native loop without touching notifications', () => {
+    const service = loadService();
+    service.stopOrderAlarmLoop();
+    expect(nativeStub.stopLoop).toHaveBeenCalled();
+    expect(Notifications.dismissAllNotificationsAsync).not.toHaveBeenCalled();
+  });
+
+  it('swallows native start/stop errors', () => {
+    nativeStub.startLoop.mockImplementation(() => {
+      throw new Error('MediaPlayer failure');
+    });
+    nativeStub.stopLoop.mockImplementation(() => {
+      throw new Error('already released');
+    });
+    const service = loadService();
+    expect(service.startOrderAlarmLoop('loud_alarm')).toBe(false);
+    expect(() => service.stopOrderAlarmLoop()).not.toThrow();
   });
 });
 

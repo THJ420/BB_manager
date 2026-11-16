@@ -5,6 +5,8 @@ import { ensurePickupNotificationChannel } from './push';
 interface OrderAlarmNative {
   present(title: string, body: string, orderId: string): boolean;
   dismiss(): void;
+  startLoop(tone: string): boolean;
+  stopLoop(): void;
   canUseFullScreenIntent(): boolean;
   openFullScreenIntentSettings(): boolean;
 }
@@ -85,6 +87,33 @@ export async function dismissOrderAlarm(): Promise<void> {
     }
   }
   await Notifications.dismissAllNotificationsAsync().catch(() => undefined);
+}
+
+/**
+ * Starts the gapless native alarm loop (looping MediaPlayer on the alarm
+ * stream + zero-off-time vibration). Returns false when the native engine is
+ * unavailable or cannot open an audio source, so callers fall back to the
+ * expo-audio loop. The loop runs until stopOrderAlarmLoop/dismissOrderAlarm.
+ */
+export function startOrderAlarmLoop(toneId: string): boolean {
+  const native = nativeAlarm();
+  if (!native) return false;
+  try {
+    return native.startLoop(toneId);
+  } catch (error) {
+    console.warn('[alarm] native alarm loop failed to start', error);
+    return false;
+  }
+}
+
+export function stopOrderAlarmLoop(): void {
+  const native = nativeAlarm();
+  if (!native) return;
+  try {
+    native.stopLoop();
+  } catch (error) {
+    console.warn('[alarm] native alarm loop failed to stop', error);
+  }
 }
 
 export type FullScreenIntentAccess = 'granted' | 'needs-settings' | 'unsupported';

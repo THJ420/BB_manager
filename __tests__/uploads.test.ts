@@ -17,6 +17,8 @@ jest.mock('../src/services/pocketbase', () => ({
 
 jest.mock('expo-file-system/legacy', () => ({
   getInfoAsync: jest.fn(async () => ({ exists: true })),
+  readAsStringAsync: jest.fn(async () => '/9j/4AAQ'),
+  EncodingType: { Base64: 'base64' },
 }));
 
 import { Platform } from 'react-native';
@@ -32,6 +34,22 @@ import { MenuItem } from '../src/types';
 const getInfoMock = FileSystem.getInfoAsync as jest.MockedFunction<
   typeof FileSystem.getInfoAsync
 >;
+const readMock = FileSystem.readAsStringAsync as jest.MockedFunction<
+  typeof FileSystem.readAsStringAsync
+>;
+
+/** The bytes behind the mocked base64 read ('/9j/4AAQ'). */
+const MOCK_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+
+interface BytesPart {
+  name: string;
+  type: string;
+  bytes: () => Promise<Uint8Array>;
+}
+
+function asBytesPart(value: unknown): BytesPart {
+  return value as BytesPart;
+}
 
 function itemWithImage(imageUrl?: string): MenuItem {
   return { ...(createSeedMenu(1)[0] as MenuItem), imageUrl };
@@ -47,6 +65,7 @@ describe('buildMenuItemWritePayload', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     getInfoMock.mockResolvedValue({ exists: true } as never);
+    readMock.mockResolvedValue('/9j/4AAQ' as never);
     (Platform as { OS: string }).OS = 'android';
     appendSpy = jest.spyOn(FormData.prototype, 'append');
   });
@@ -55,18 +74,21 @@ describe('buildMenuItemWritePayload', () => {
     appendSpy.mockRestore();
   });
 
-  it('packages a content:// photo without an extension as a named JPEG part', async () => {
+  it('packages a content:// photo as a bytes() part Expo fetch can serialize', async () => {
     const item = itemWithImage('content://media/external/images/media/42');
 
     const payload = await buildMenuItemWritePayload(item);
 
     expect(payload).toBeInstanceOf(FormData);
-    const part = imagePart(appendSpy);
-    expect(part?.[1]).toEqual({
-      uri: 'content://media/external/images/media/42',
-      name: `menu_${item.id}.jpg`,
-      type: 'image/jpeg',
-    });
+    const part = asBytesPart(imagePart(appendSpy)?.[1]);
+    expect(part.name).toBe(`menu_${item.id}.jpg`);
+    expect(part.type).toBe('image/jpeg');
+    expect(typeof part.bytes).toBe('function');
+    expect(await part.bytes()).toEqual(MOCK_BYTES);
+    expect(readMock).toHaveBeenCalledWith(
+      'content://media/external/images/media/42',
+      { encoding: 'base64' }
+    );
     // The stale external URL field is cleared whenever a file is attached.
     expect(appendSpy).toHaveBeenCalledWith('image_url', '');
   });
@@ -76,22 +98,22 @@ describe('buildMenuItemWritePayload', () => {
 
     await buildMenuItemWritePayload(item);
 
-    expect(imagePart(appendSpy)?.[1]).toEqual({
-      uri: 'file:///data/cache/IMG_0001.png',
-      name: `menu_${item.id}.png`,
-      type: 'image/png',
-    });
+    const part = asBytesPart(imagePart(appendSpy)?.[1]);
+    expect(part.name).toBe(`menu_${item.id}.png`);
+    expect(part.type).toBe('image/png');
+    expect(await part.bytes()).toEqual(MOCK_BYTES);
   });
 
-  it('falls back to JPEG for an unknown data: subtype', async () => {
-    const item = itemWithImage('data:application/octet-stream;base64,AAAA');
+  it('falls back to JPEG for an unknown data: subtype and decodes its payload', async () => {
+    const item = itemWithImage('data:application/octet-stream;base64,AAEC');
 
     await buildMenuItemWritePayload(item);
 
-    expect(imagePart(appendSpy)?.[1]).toMatchObject({
-      name: `menu_${item.id}.jpg`,
-      type: 'image/jpeg',
-    });
+    const part = asBytesPart(imagePart(appendSpy)?.[1]);
+    expect(part.name).toBe(`menu_${item.id}.jpg`);
+    expect(part.type).toBe('image/jpeg');
+    expect(await part.bytes()).toEqual(new Uint8Array([0, 1, 2]));
+    expect(readMock).not.toHaveBeenCalled();
   });
 
   it('honors a declared image/png data URI', async () => {
@@ -99,10 +121,19 @@ describe('buildMenuItemWritePayload', () => {
 
     await buildMenuItemWritePayload(item);
 
-    expect(imagePart(appendSpy)?.[1]).toMatchObject({
-      name: `menu_${item.id}.png`,
-      type: 'image/png',
-    });
+    const part = asBytesPart(imagePart(appendSpy)?.[1]);
+    expect(part.name).toBe(`menu_${item.id}.png`);
+    expect(part.type).toBe('image/png');
+    expect(await part.bytes()).toEqual(new Uint8Array([0, 0, 0]));
+  });
+
+  it('wraps an unreadable local photo as a permanent UploadPayloadError', async () => {
+    readMock.mockRejectedValue(new Error('EACCES: permission denied'));
+    const item = itemWithImage('file:///data/cache/locked.jpg');
+
+    await expect(buildMenuItemWritePayload(item)).rejects.toBeInstanceOf(
+      UploadPayloadError
+    );
   });
 
   it('throws a permanent UploadPayloadError when the local file is gone', async () => {

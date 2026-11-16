@@ -6,10 +6,15 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
+import android.os.VibrationAttributes
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -24,16 +29,27 @@ import expo.modules.kotlin.modules.ModuleDefinition
  * setFullScreenIntent(MainActivity), which Android launches full-screen over
  * the lock screen (or as a heads-up banner when the screen is already on).
  * A short screen-bright wake lock guarantees the display turns on for it.
+ *
+ * Sound and vibration are owned by a native looping MediaPlayer + Vibrator
+ * (startLoop/stopLoop), not by the notification channel: MediaPlayer loops a
+ * local resource gaplessly, and the alarm-stream vibration repeats with zero
+ * off-time, so the terminal rings non-stop until Accept/Reject dismisses it.
  */
 class OrderAlarmModule : Module() {
   companion object {
-    private const val CHANNEL_ID = "pickup-orders-fsi-v1"
+    // v2 is silent: channel settings are immutable once created, and the
+    // continuous loop (not the one-shot channel sound) owns the alarm audio.
+    private const val CHANNEL_ID = "pickup-orders-fsi-v2"
     private const val NOTIFICATION_ID = 7001
     private const val REQUEST_CODE = 7002
     private const val WAKE_TIMEOUT_MS = 10_000L
+    private val VIBRATION_PATTERN = longArrayOf(0, 2000)
   }
 
   private var wakeLock: PowerManager.WakeLock? = null
+  private var mediaPlayer: MediaPlayer? = null
+  private var vibrator: Vibrator? = null
+  private var serviceContext: Context? = null
 
   override fun definition() = ModuleDefinition {
     Name("OrderAlarm")
@@ -48,7 +64,17 @@ class OrderAlarmModule : Module() {
       if (context != null) {
         NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
       }
+      stopAlarmLoop()
       releaseWakeLock()
+    }
+
+    Function("startLoop") { tone: String ->
+      val context = appContext.reactContext ?: return@Function false
+      startAlarmLoop(context, tone)
+    }
+
+    Function("stopLoop") {
+      stopAlarmLoop()
     }
 
     Function("canUseFullScreenIntent") {
@@ -75,16 +101,10 @@ class OrderAlarmModule : Module() {
       description = "Full-screen incoming pickup order alarms for this terminal."
       setBypassDnd(true)
       lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
-      enableVibration(true)
-      vibrationPattern = longArrayOf(0, 700, 400, 700, 400, 1200)
-      val soundUri = alarmSoundUri(context)
-      setSound(
-        soundUri,
-        AudioAttributes.Builder()
-          .setUsage(AudioAttributes.USAGE_ALARM)
-          .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-          .build()
-      )
+      // The looping engine owns audio and vibration; a channel sound would
+      // double-ring once on every re-post while the loop is already running.
+      setSound(null, null)
+      enableVibration(false)
     }
     manager.createNotificationChannel(channel)
   }
@@ -97,6 +117,126 @@ class OrderAlarmModule : Module() {
       Uri.parse("android.resource://${context.packageName}/$resId")
     } else {
       RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+    }
+  }
+
+  /**
+   * Gapless alarm audio + continuous vibration until stopAlarmLoop().
+   * Returns false when no audio source could be opened so the JS layer can
+   * fall back to its expo-audio loop; vibration still runs either way.
+   */
+  private fun startAlarmLoop(context: Context, tone: String): Boolean {
+    stopAlarmLoop()
+    startKeepAliveService(context)
+    startVibration(context)
+
+    val player = MediaPlayer()
+    return try {
+      player.setAudioAttributes(
+        AudioAttributes.Builder()
+          .setUsage(AudioAttributes.USAGE_ALARM)
+          .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+          .build()
+      )
+      val resId = context.resources.getIdentifier(tone, "raw", context.packageName)
+      if (resId != 0) {
+        player.setDataSource(context, Uri.parse("android.resource://${context.packageName}/$resId"))
+      } else {
+        player.setDataSource(context, alarmSoundUri(context))
+      }
+      // MediaPlayer repeats a local resource without the rebuffer gap that
+      // JS-side player restarts produce.
+      player.isLooping = true
+      player.prepare()
+      player.start()
+      mediaPlayer = player
+      true
+    } catch (error: Exception) {
+      try {
+        player.release()
+      } catch (_: Exception) {
+      }
+      false
+    }
+  }
+
+  private fun stopAlarmLoop() {
+    try {
+      mediaPlayer?.let { player ->
+        if (player.isPlaying) player.stop()
+        player.release()
+      }
+    } catch (_: Exception) {
+    }
+    mediaPlayer = null
+    try {
+      vibrator?.cancel()
+    } catch (_: Exception) {
+    }
+    vibrator = null
+    stopKeepAliveService()
+  }
+
+  private fun startKeepAliveService(context: Context) {
+    try {
+      val intent = Intent(context, OrderAlarmService::class.java)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        context.startForegroundService(intent)
+      } else {
+        context.startService(intent)
+      }
+      serviceContext = context.applicationContext
+    } catch (_: Exception) {
+      // Android 12+ can block background foreground-service starts; the alarm
+      // audio still plays and the full-screen intent brings the app forward.
+    }
+  }
+
+  private fun stopKeepAliveService() {
+    try {
+      serviceContext?.let { context ->
+        context.stopService(Intent(context, OrderAlarmService::class.java))
+      }
+    } catch (_: Exception) {
+    }
+    serviceContext = null
+  }
+
+  @Suppress("DEPRECATION")
+  private fun startVibration(context: Context) {
+    try {
+      val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val manager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+        manager.defaultVibrator
+      } else {
+        context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+      }
+      if (!device.hasVibrator()) return
+      // Repeat from index 0 with zero wait: vibration never pauses.
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val effect = VibrationEffect.createWaveform(VIBRATION_PATTERN, 0)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+          device.vibrate(
+            effect,
+            VibrationAttributes.Builder()
+              .setUsage(VibrationAttributes.USAGE_ALARM)
+              .build()
+          )
+        } else {
+          device.vibrate(
+            effect,
+            AudioAttributes.Builder()
+              .setUsage(AudioAttributes.USAGE_ALARM)
+              .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+              .build()
+          )
+        }
+      } else {
+        device.vibrate(VIBRATION_PATTERN, 0)
+      }
+      vibrator = device
+    } catch (_: Exception) {
+      // Vibration is best-effort; the audio loop must not fail because of it.
     }
   }
 
@@ -129,9 +269,9 @@ class OrderAlarmModule : Module() {
       .setOngoing(true)
       .setAutoCancel(true)
       .setContentIntent(pendingIntent)
-      // The flag that forces the alarm screen over the lock screen.
+      // The flag that forces the alarm screen over the lock screen. No
+      // timeout: the alarm persists until Accept/Reject dismisses it.
       .setFullScreenIntent(pendingIntent, true)
-      .setTimeoutAfter(120_000)
       .build()
 
     wakeScreen(context)
