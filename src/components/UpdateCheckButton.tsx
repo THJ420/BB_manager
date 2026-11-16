@@ -3,7 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { ActionButton } from './ActionButton';
 import { DialogModal } from './DialogModal';
 import { useApp } from '../state/AppProvider';
-import { currentAppVersion } from '../services/updater';
+import { currentAppVersion, UPDATE_CHECK_ERROR_MESSAGE } from '../services/updater';
 import { Colors, Spacing } from '../theme/colors';
 import { Fonts } from '../theme/typography';
 
@@ -18,16 +18,21 @@ export function UpdateCheckButton() {
 
   const handleCheck = async () => {
     if (checkingAppUpdate) return;
-    const check = await checkForAppUpdate();
-    if (check.available) return;
-    if (check.error) {
-      setResult({ title: 'Update Check Failed', message: check.error });
-      return;
+    setResult(null);
+    try {
+      const check = await checkForAppUpdate();
+      if (check.error) {
+        setResult({ title: 'Update Check Failed', message: UPDATE_CHECK_ERROR_MESSAGE });
+      } else if (!check.available) {
+        setResult({
+          title: 'Up to Date',
+          message: 'You are already using the latest version of the app.',
+        });
+      }
+    } catch (error) {
+      console.warn('Manual app update check failed', error);
+      setResult({ title: 'Update Check Failed', message: UPDATE_CHECK_ERROR_MESSAGE });
     }
-    setResult({
-      title: 'Up to Date',
-      message: `BB Manager is up to date (v${check.currentVersion || currentAppVersion()}).`,
-    });
   };
 
   return (

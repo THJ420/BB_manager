@@ -69,7 +69,12 @@ import { IncomingOrderCallModal } from '../components/IncomingOrderCallModal';
 import { AppUpdatePrompt } from '../components/AppUpdatePrompt';
 import { BackgroundPermissionModal } from '../components/BackgroundPermissionModal';
 import { RejectOrderModal } from '../components/RejectOrderModal';
-import { checkForUpdate, ReleaseInfo, UpdateCheck } from '../services/updater';
+import {
+  checkForUpdate,
+  checkForUpdateAutomatically,
+  ReleaseInfo,
+  UpdateCheck,
+} from '../services/updater';
 import { shouldShowBackgroundRationale } from '../services/backgroundPermissions';
 import {
   Branch,
@@ -1691,15 +1696,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [applyBranchSnapshot]
   );
 
+  const showAvailableUpdate = useCallback((result: UpdateCheck | null) => {
+    if (result?.available && result.release) {
+      setUpdateRelease(result.release);
+      setUpdatePromptVisible(true);
+    }
+  }, []);
+
   const checkForAppUpdate = useCallback((): Promise<UpdateCheck> => {
     if (!updateCheckPromiseRef.current) {
+      // Only manual checks show a spinner/disable the button. A user can still
+      // request feedback while an automatic check is running, sharing its fetch.
       setCheckingAppUpdate(true);
       updateCheckPromiseRef.current = checkForUpdate()
         .then((result) => {
-          if (result.available && result.release) {
-            setUpdateRelease(result.release);
-            setUpdatePromptVisible(true);
-          }
+          showAvailableUpdate(result);
           return result;
         })
         .finally(() => {
@@ -1708,13 +1719,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
         });
     }
     return updateCheckPromiseRef.current;
-  }, []);
+  }, [showAvailableUpdate]);
 
-  // Aggressive launch check: silent when offline, modal as soon as a newer
-  // GitHub release is detected.
+  // Startup and foreground checks share the persisted 24-hour attempt gate.
+  // Errors are logged by the service, never surfaced automatically in the UI.
   useEffect(() => {
-    void checkForAppUpdate();
-  }, [checkForAppUpdate]);
+    let cancelled = false;
+    let previousState = NativeAppState.currentState;
+    const checkAutomatically = () => {
+      void checkForUpdateAutomatically().then((result) => {
+        if (!cancelled) showAvailableUpdate(result);
+      });
+    };
+    checkAutomatically();
+    const subscription = NativeAppState.addEventListener('change', (next) => {
+      if (next === 'active' && previousState !== 'active') checkAutomatically();
+      previousState = next;
+    });
+    return () => {
+      cancelled = true;
+      subscription.remove();
+    };
+  }, [showAvailableUpdate]);
 
   const value = useMemo<AppContextValue>(
     () => ({

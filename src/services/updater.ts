@@ -3,6 +3,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as IntentLauncher from 'expo-intent-launcher';
 import { Linking, Platform } from 'react-native';
 import { isNewerVersion } from '../lib/version';
+import { loadSnapshot, saveSnapshot } from '../db/sqlite';
 
 /**
  * In-app updater for the public GitHub release feed.
@@ -50,6 +51,15 @@ export function sanitizeReleaseNotes(notes: string): string {
 
 const DEFAULT_REPO = 'THJ420/BB_manager';
 const APK_ASSET_NAME = 'bb-manager-preview.apk';
+const LAST_UPDATE_ATTEMPT_KEY = 'app_update_last_attempt';
+export const UPDATE_CHECK_TIMEOUT_MS = 10_000;
+export const AUTOMATIC_UPDATE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+export const UPDATE_CHECK_ERROR_MESSAGE =
+  'Sorry, server is busy now, please try after a few minutes.';
+
+let updateCheckPromise: Promise<UpdateCheck> | null = null;
+let automaticCheckPromise: Promise<UpdateCheck | null> | null = null;
+let lastAttemptAt: number | null = null;
 
 function releaseRepo(): string {
   const extra = Constants.expoConfig?.extra as { githubRepo?: unknown } | undefined;
@@ -62,57 +72,143 @@ export function currentAppVersion(): string {
   return Constants.expoConfig?.version ?? '0.0.0';
 }
 
-export async function checkForUpdate(): Promise<UpdateCheck> {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isHttpsUrl(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function parseRelease(data: unknown): ReleaseInfo {
+  if (!isRecord(data) || typeof data.tag_name !== 'string') {
+    throw new Error('Invalid update response: missing release tag');
+  }
+  const tag = data.tag_name.trim();
+  const version = tag.replace(/^v/i, '');
+  if (
+    !/^\d+\.\d+\.\d+(?:-[\da-z.-]+)?(?:\+[\da-z.-]+)?$/i.test(version) ||
+    !isHttpsUrl(data.html_url) ||
+    !Array.isArray(data.assets)
+  ) {
+    throw new Error('Invalid update response: release version, URL or assets');
+  }
+  const apkRecords = data.assets.filter(
+    (asset): asset is Record<string, unknown> => {
+      if (!isRecord(asset) || typeof asset.name !== 'string') {
+        throw new Error('Invalid update response: malformed asset');
+      }
+      if (!/\.apk$/i.test(asset.name)) return false;
+      if (!isHttpsUrl(asset.browser_download_url)) {
+        throw new Error('Invalid update response: APK URL');
+      }
+      return true;
+    }
+  );
+  const apk = apkRecords.find((record) => record.name === APK_ASSET_NAME) ?? apkRecords[0];
+
+  return {
+    version,
+    tag,
+    notes: typeof data.body === 'string' ? data.body.trim() : '',
+    apkUrl: apk ? (apk.browser_download_url as string) : null,
+    htmlUrl: data.html_url,
+    publishedAt: typeof data.published_at === 'string' ? data.published_at : null,
+  };
+}
+
+async function fetchUpdate(): Promise<UpdateCheck> {
   const currentVersion = currentAppVersion();
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
 
   try {
-    const response = await fetch(
-      `https://api.github.com/repos/${releaseRepo()}/releases/latest`,
-      { headers: { Accept: 'application/vnd.github+json' } }
-    );
-    if (!response.ok) {
-      return {
-        available: false,
-        currentVersion,
-        release: null,
-        error: `GitHub returned HTTP ${response.status}. Try again in a moment.`,
-      };
-    }
-
-    const data = (await response.json()) as Record<string, unknown>;
-    const tag = String(data.tag_name ?? data.name ?? '').trim();
-    const version = tag.replace(/^v/i, '');
-    const assets = Array.isArray(data.assets) ? data.assets : [];
-    const apkRecords = assets
-      .map((asset) => asset as Record<string, unknown>)
-      .filter((record) => /\.apk$/i.test(String(record.name ?? '')));
-    const apk =
-      apkRecords.find((record) => String(record.name) === APK_ASSET_NAME) ??
-      apkRecords[0];
-
-    const release: ReleaseInfo = {
-      version,
-      tag,
-      notes: String(data.body ?? '').trim(),
-      apkUrl: typeof apk?.browser_download_url === 'string' ? apk.browser_download_url : null,
-      htmlUrl: String(data.html_url ?? ''),
-      publishedAt: typeof data.published_at === 'string' ? data.published_at : null,
-    };
+    // Race the whole request, including JSON parsing: some transports do not
+    // settle promptly on abort, and headers can arrive before a stalled body.
+    const release = await Promise.race([
+      (async () => {
+        const response = await fetch(
+          `https://api.github.com/repos/${releaseRepo()}/releases/latest`,
+          {
+            headers: { Accept: 'application/vnd.github+json' },
+            signal: controller.signal,
+          }
+        );
+        if (!response.ok) {
+          throw new Error(`Update server returned HTTP ${response.status}`);
+        }
+        return parseRelease(await response.json());
+      })(),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(`Update check timed out after ${UPDATE_CHECK_TIMEOUT_MS}ms`));
+          controller.abort();
+        }, UPDATE_CHECK_TIMEOUT_MS);
+      }),
+    ]);
 
     return {
-      available: version ? isNewerVersion(version, currentVersion) : false,
+      available: isNewerVersion(release.version, currentVersion),
       currentVersion,
       release,
       error: null,
     };
-  } catch {
+  } catch (error) {
+    console.warn('Unable to check for app updates', error);
     return {
       available: false,
       currentVersion,
       release: null,
-      error: 'Could not reach GitHub. Check the network connection and try again.',
+      error: UPDATE_CHECK_ERROR_MESSAGE,
     };
+  } finally {
+    clearTimeout(timeout);
   }
+}
+
+/** Manual checks bypass the daily gate but share any request already running. */
+export function checkForUpdate(): Promise<UpdateCheck> {
+  if (!updateCheckPromise) {
+    lastAttemptAt = Date.now();
+    // Record attempts before fetching, including failures, so restarting offline
+    // cannot hammer the release feed. Keep an in-memory fallback if SQLite fails.
+    updateCheckPromise = saveSnapshot(LAST_UPDATE_ATTEMPT_KEY, lastAttemptAt)
+      .catch((error) => console.warn('Unable to persist app update attempt', error))
+      .then(fetchUpdate)
+      .finally(() => {
+        updateCheckPromise = null;
+      });
+  }
+  return updateCheckPromise;
+}
+
+/** Null means throttled, not "up to date". No release result is cached. */
+export function checkForUpdateAutomatically(): Promise<UpdateCheck | null> {
+  if (updateCheckPromise) return updateCheckPromise;
+  if (!automaticCheckPromise) {
+    automaticCheckPromise = (async () => {
+      const stored = await loadSnapshot<unknown>(LAST_UPDATE_ATTEMPT_KEY).catch((error) => {
+        console.warn('Unable to load app update attempt', error);
+        return null;
+      });
+      // A manual check may have started (or finished) while SQLite was loading.
+      if (updateCheckPromise) return updateCheckPromise;
+      const previous = lastAttemptAt ?? stored;
+      const elapsed = typeof previous === 'number' ? Date.now() - previous : NaN;
+      if (Number.isFinite(elapsed) && elapsed >= 0 && elapsed < AUTOMATIC_UPDATE_INTERVAL_MS) {
+        return null;
+      }
+      return checkForUpdate();
+    })().finally(() => {
+      automaticCheckPromise = null;
+    });
+  }
+  return automaticCheckPromise;
 }
 
 export async function downloadAndInstallUpdate(
