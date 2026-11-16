@@ -1,6 +1,7 @@
 import React from 'react';
 import { Image, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { Colors, Layout, Radius } from '../theme/colors';
+import { Fonts } from '../theme/typography';
 import { formatCurrency } from '../lib/format';
 import { MenuItem } from '../types';
 
@@ -78,9 +79,9 @@ export function MenuItemCard({ item, onToggleStock, onEditItem }: MenuItemCardPr
             onValueChange={onToggleStock}
             trackColor={{
               false: Colors.switchTrackOff,
-              true: Colors.successMuted,
+              true: Colors.success,
             }}
-            thumbColor={item.inStock ? Colors.success : Colors.switchThumbOff}
+            thumbColor={item.inStock ? Colors.white : Colors.switchThumbOff}
             ios_backgroundColor={Colors.switchTrackOff}
             hitSlop={{ top: 10, bottom: 10, left: 2, right: 2 }}
             testID={`switch_stock_${item.id}`}
@@ -101,16 +102,16 @@ export function MenuItemCard({ item, onToggleStock, onEditItem }: MenuItemCardPr
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: Radius.xl,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     padding: 10,
     gap: 8,
     minWidth: 0,
   },
   cardOutOfStock: {
-    borderColor: 'rgba(239, 68, 68, 0.35)',
+    borderColor: Colors.errorBorder,
   },
   mediaPress: {
     borderRadius: Radius.md,
@@ -118,9 +119,9 @@ const styles = StyleSheet.create({
   },
   image: {
     width: '100%',
-    height: 86,
+    aspectRatio: 1,
     borderRadius: Radius.md,
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.glassFill,
   },
   imagePlaceholder: {
     alignItems: 'center',
@@ -139,29 +140,31 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   categoryPill: {
-    backgroundColor: 'rgba(18, 18, 18, 0.82)',
-    borderRadius: Radius.sm,
-    paddingHorizontal: 5,
+    backgroundColor: 'rgba(15, 17, 23, 0.72)',
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
+    borderRadius: Radius.full,
+    paddingHorizontal: 6,
     paddingVertical: 2,
     maxWidth: '62%',
   },
   categoryText: {
+    fontFamily: Fonts.interBold,
     fontSize: 8,
-    fontWeight: '800',
     letterSpacing: 0.4,
     color: Colors.textSecondary,
   },
   hiddenPill: {
     backgroundColor: Colors.errorMuted,
-    borderRadius: Radius.sm,
+    borderRadius: Radius.full,
     borderWidth: 1,
     borderColor: Colors.errorBorder,
-    paddingHorizontal: 4,
+    paddingHorizontal: 6,
     paddingVertical: 2,
   },
   hiddenText: {
+    fontFamily: Fonts.interBold,
     fontSize: 7.5,
-    fontWeight: '900',
     letterSpacing: 0.3,
     color: Colors.error,
   },
@@ -170,19 +173,20 @@ const styles = StyleSheet.create({
     minHeight: 62,
   },
   name: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 13.5,
-    fontWeight: '800',
     lineHeight: 17,
     color: Colors.textPrimary,
   },
   description: {
+    fontFamily: Fonts.interRegular,
     fontSize: 10.5,
     lineHeight: 14,
     color: Colors.textMuted,
   },
   divider: {
     height: 1,
-    backgroundColor: Colors.surfaceBorder,
+    backgroundColor: Colors.surfaceBorderSubtle,
   },
   footer: {
     flexDirection: 'row',
@@ -195,15 +199,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   price: {
+    fontFamily: Fonts.jakartaExtraBold,
     fontSize: 16,
-    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
     color: Colors.textPrimary,
   },
   priceHint: {
+    fontFamily: Fonts.interBold,
     fontSize: 8,
-    fontWeight: '800',
     letterSpacing: 0.3,
-    color: Colors.primary,
+    color: Colors.primaryText,
   },
   stockBlock: {
     alignItems: 'center',
@@ -213,8 +218,8 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   stockText: {
+    fontFamily: Fonts.interBold,
     fontSize: 7.5,
-    fontWeight: '900',
     letterSpacing: 0.3,
   },
 });

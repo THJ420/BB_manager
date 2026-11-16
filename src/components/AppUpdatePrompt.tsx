@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { Colors, Radius, Spacing } from '../theme/colors';
+import { Fonts } from '../theme/typography';
 import {
   currentAppVersion,
   downloadAndInstallUpdate,
@@ -202,7 +203,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: Spacing.lg,
-    backgroundColor: 'rgba(0, 0, 0, 0.78)',
+    backgroundColor: Colors.overlay,
   },
   card: {
     width: '100%',
@@ -224,37 +225,39 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   badgeText: {
+    fontFamily: Fonts.interBold,
     fontSize: 9,
-    fontWeight: '900',
     letterSpacing: 0.8,
-    color: Colors.primary,
+    color: Colors.primaryText,
   },
   title: {
+    fontFamily: Fonts.jakartaExtraBold,
     fontSize: 20,
-    fontWeight: '900',
     color: Colors.textPrimary,
   },
   subtitle: {
+    fontFamily: Fonts.interRegular,
     fontSize: 12,
     lineHeight: 18,
     color: Colors.textSecondary,
   },
   notesBox: {
     maxHeight: 160,
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.glassFill,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     padding: Spacing.sm,
   },
   notesText: {
+    fontFamily: Fonts.interRegular,
     fontSize: 11,
     lineHeight: 17,
     color: Colors.textSecondary,
   },
   error: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 12,
-    fontWeight: '600',
     color: Colors.error,
   },
   progressBlock: {
@@ -267,22 +270,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   progressStatus: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 12,
-    fontWeight: '700',
     color: Colors.textPrimary,
   },
   progressPercent: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 12,
-    fontWeight: '900',
-    color: Colors.primary,
+    color: Colors.primaryText,
     fontVariant: ['tabular-nums'],
   },
   progressTrack: {
     height: 10,
     borderRadius: Radius.full,
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.glassFillStrong,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     overflow: 'hidden',
   },
   progressFill: {
@@ -300,6 +303,7 @@ const styles = StyleSheet.create({
     transform: [{ skewX: '-18deg' }],
   },
   progressHint: {
+    fontFamily: Fonts.interRegular,
     fontSize: 10,
     lineHeight: 14,
     color: Colors.textMuted,
@@ -310,10 +314,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: Radius.md,
     backgroundColor: Colors.primary,
+    shadowColor: Colors.primary,
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 6,
   },
   primaryText: {
+    fontFamily: Fonts.interBold,
     fontSize: 14,
-    fontWeight: '900',
     letterSpacing: 0.8,
     color: Colors.white,
   },
@@ -323,8 +332,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   secondaryText: {
+    fontFamily: Fonts.interBold,
     fontSize: 11,
-    fontWeight: '800',
     letterSpacing: 0.6,
     color: Colors.textMuted,
   },

@@ -9,7 +9,9 @@ import {
   Text,
   View,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { Colors, Layout, Radius, Spacing } from '../theme/colors';
+import { Fonts, Typography } from '../theme/typography';
 
 export interface ModalShellProps {
   visible: boolean;
@@ -42,6 +44,13 @@ export function ModalShell({
           Android (a full-screen absolute Pressable above the sheet swallows
           every tap on inputs). */}
       <View style={styles.overlay}>
+        <BlurView
+          intensity={40}
+          tint="dark"
+          experimentalBlurMethod={Platform.OS === 'android' ? 'dimezisBlurView' : 'none'}
+          style={styles.scrimFrost}
+          pointerEvents="none"
+        />
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={onClose}
@@ -101,6 +110,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.overlay,
   },
+  scrimFrost: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   center: {
     flex: 1,
     alignItems: 'center',
@@ -111,10 +127,10 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 520,
     maxHeight: '100%',
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.surfaceElevated,
     borderRadius: Radius.xl,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     overflow: 'hidden',
   },
   header: {
@@ -130,14 +146,13 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   title: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 18,
-    fontWeight: '800',
+    lineHeight: 24,
     color: Colors.textPrimary,
   },
   subtitle: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: Colors.textSecondary,
+    ...Typography.screenSubtitle,
   },
   closeButton: {
     width: Layout.minTouch,
@@ -147,11 +162,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   closePressed: {
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.glassFillStrong,
   },
   closeText: {
+    fontFamily: Fonts.interBold,
     fontSize: 16,
-    fontWeight: '800',
     color: Colors.textSecondary,
   },
   scroll: {
@@ -168,7 +183,7 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     padding: Spacing.md,
     borderTopWidth: 1,
-    borderTopColor: Colors.surfaceBorder,
-    backgroundColor: Colors.surface,
+    borderTopColor: Colors.glassBorder,
+    backgroundColor: Colors.surfaceElevated,
   },
 });

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, StyleProp, StyleSheet, Text, ViewStyle } from 'react-native';
 import { Colors, Layout, Radius } from '../theme/colors';
+import { Typography } from '../theme/typography';
 
 export type ButtonVariant =
   | 'primary'
@@ -22,30 +23,36 @@ interface Palette {
 const PALETTES: Record<ButtonVariant, Palette> = {
   primary: { background: Colors.primary, border: Colors.primary, text: Colors.white },
   success: { background: Colors.success, border: Colors.success, text: Colors.textInverse },
-  slate: { background: Colors.slateDark, border: Colors.surfaceBorder, text: Colors.white },
+  slate: {
+    background: Colors.glassFillStrong,
+    border: Colors.glassBorderStrong,
+    text: Colors.white,
+  },
   warning: { background: Colors.warning, border: Colors.warning, text: Colors.textInverse },
   danger: { background: Colors.error, border: Colors.error, text: Colors.white },
   outline: {
     background: Colors.transparent,
-    border: Colors.surfaceBorder,
+    border: Colors.glassBorderStrong,
     text: Colors.textSecondary,
   },
   dangerOutline: {
-    background: Colors.transparent,
+    background: Colors.errorMuted,
     border: Colors.errorBorder,
     text: Colors.error,
   },
   subtle: {
-    background: Colors.surfaceHighlight,
+    background: Colors.surfaceElevated,
     border: Colors.surfaceBorder,
     text: Colors.textPrimary,
   },
   tonal: {
-    background: Colors.surfaceHighlight,
-    border: Colors.surfaceBorder,
-    text: Colors.primary,
+    background: Colors.primaryMuted,
+    border: Colors.primaryBorder,
+    text: Colors.primaryText,
   },
 };
+
+const SOLID_VARIANTS: ButtonVariant[] = ['primary', 'success', 'warning', 'danger'];
 
 export interface ActionButtonProps {
   label: string;
@@ -74,6 +81,7 @@ export function ActionButton({
   accessibilityHint,
 }: ActionButtonProps) {
   const palette = PALETTES[variant];
+  const solid = SOLID_VARIANTS.includes(variant);
 
   return (
     <Pressable
@@ -90,6 +98,7 @@ export function ActionButton({
           backgroundColor: palette.background,
           borderColor: palette.border,
         },
+        solid && styles.specular,
         fullWidth && styles.fullWidth,
         compact && styles.compact,
         disabled && styles.disabled,
@@ -110,11 +119,14 @@ const styles = StyleSheet.create({
     minHeight: Layout.minTouch,
     borderRadius: Radius.md,
     borderWidth: 1,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 6,
+  },
+  specular: {
+    borderTopColor: 'rgba(255, 255, 255, 0.25)',
   },
   fullWidth: {
     alignSelf: 'stretch',
@@ -129,9 +141,7 @@ const styles = StyleSheet.create({
     opacity: 0.82,
   },
   label: {
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 0.3,
+    ...Typography.button,
   },
   icon: {
     fontSize: 13,

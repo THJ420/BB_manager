@@ -1,12 +1,14 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { BlurView } from 'expo-blur';
 import type { Href } from 'expo-router';
 import { usePathname, useRouter } from 'expo-router';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { countActiveOrders } from '../lib/domain';
 import { useApp } from '../state/AppProvider';
 import { Colors, Layout, Radius } from '../theme/colors';
+import { Fonts } from '../theme/typography';
 
 type IconName = React.ComponentProps<typeof MaterialIcons>['name'];
 
@@ -71,9 +73,15 @@ export function BottomNav() {
 
   return (
     <View
-      style={[styles.container, { paddingBottom: Math.max(insets.bottom, 4) }]}
+      style={[styles.dock, { bottom: insets.bottom + Layout.navDockOffset }]}
       accessibilityRole="tablist"
     >
+      <BlurView
+        intensity={60}
+        tint="dark"
+        experimentalBlurMethod={Platform.OS === 'android' ? 'dimezisBlurView' : 'none'}
+        style={styles.frost}
+      />
       <View style={styles.row}>
         {tabs.map((tab) => {
           const selected = tab.key === activeKey;
@@ -93,8 +101,8 @@ export function BottomNav() {
             >
               <MaterialIcons
                 name={tab.icon}
-                size={24}
-                color={selected ? Colors.primary : Colors.textMuted}
+                size={22}
+                color={selected ? Colors.primaryText : Colors.textMuted}
               />
 
               {tab.key === 'orders' && activeOrders > 0 ? (
@@ -113,13 +121,32 @@ export function BottomNav() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: Colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: Colors.surfaceBorder,
+  dock: {
+    position: 'absolute',
+    left: Layout.screenPadding,
+    right: Layout.screenPadding,
+    height: Layout.bottomNavHeight,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
+    backgroundColor: Colors.navFill,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 12,
+  },
+  frost: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: Colors.navFill,
   },
   row: {
-    height: Layout.bottomNavHeight,
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
@@ -129,7 +156,7 @@ const styles = StyleSheet.create({
   tab: {
     width: Layout.minTouch,
     height: Layout.minTouch,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -141,33 +168,41 @@ const styles = StyleSheet.create({
   tabSelected: {
     backgroundColor: Colors.primaryMuted,
     borderColor: Colors.primaryBorder,
+    shadowColor: Colors.primary,
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
   },
   tabPressed: {
     opacity: 0.8,
   },
   badge: {
     position: 'absolute',
-    top: 1,
+    top: 2,
     right: 2,
     minWidth: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: Colors.warning,
+    backgroundColor: Colors.info,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 3,
   },
   badgeText: {
+    fontFamily: Fonts.interBold,
     fontSize: 9,
-    fontWeight: '900',
     color: Colors.textInverse,
   },
   activeDot: {
     position: 'absolute',
-    bottom: 3,
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+    bottom: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: Colors.primary,
+    shadowColor: Colors.primary,
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
   },
 });

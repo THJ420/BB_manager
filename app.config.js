@@ -42,17 +42,17 @@ module.exports = {
   expo: {
     name: 'BB Manager',
     slug: 'bb-manager',
-    version: '1.4.5',
+    version: '1.4.6',
     orientation: 'default',
     scheme: 'bbmanager',
     userInterfaceStyle: 'dark',
-    backgroundColor: '#121212',
+    backgroundColor: '#0F1117',
     icon: './assets/icon.png',
     newArchEnabled: true,
     splash: {
       image: './assets/splash-icon.png',
       resizeMode: 'contain',
-      backgroundColor: '#121212',
+      backgroundColor: '#0F1117',
     },
     ios: {
       supportsTablet: true,
@@ -68,7 +68,7 @@ module.exports = {
       edgeToEdgeEnabled: true,
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
-        backgroundColor: '#121212',
+        backgroundColor: '#0F1117',
       },
       permissions: [
         'android.permission.INTERNET',
@@ -111,7 +111,7 @@ module.exports = {
       [
         'expo-notifications',
         {
-          color: '#F97316',
+          color: '#6366F1',
           // Bundles the alarm into android res/raw so the pickup channel and
           // remote pushes ring with the same loud tone as the in-app loop.
           sounds: ['./assets/sounds/loud_alarm.wav'],

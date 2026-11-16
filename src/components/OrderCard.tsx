@@ -1,8 +1,9 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Colors, Radius, Spacing } from '../theme/colors';
+import { Fonts, Typography } from '../theme/typography';
 import { formatCurrency } from '../lib/format';
-import { orderAction, orderTiming } from '../lib/domain';
+import { orderAction, orderStatusBadge, orderTiming } from '../lib/domain';
 import { Order, OrderStatus } from '../types';
 import { ActionButton, ButtonVariant } from './ActionButton';
 import { StatusBadge } from './StatusBadge';
@@ -28,6 +29,8 @@ const ACTION_VARIANT: Record<'new' | 'preparing' | 'ready', ButtonVariant> = {
   ready: 'slate',
 };
 
+const tabular = ['tabular-nums'] as const;
+
 export function OrderCard({
   order,
   now,
@@ -49,6 +52,7 @@ export function OrderCard({
     Boolean(onReject) &&
     order.status !== 'completed' &&
     order.status !== 'cancelled';
+  const accent = orderStatusBadge(order.status).foreground;
 
   const content = (
     <>
@@ -158,6 +162,8 @@ export function OrderCard({
     </>
   );
 
+  const accentBar = <View style={[styles.accent, { backgroundColor: accent }]} />;
+
   if (onSelect) {
     return (
       <Pressable
@@ -172,6 +178,7 @@ export function OrderCard({
           pressed && styles.cardPressed,
         ]}
       >
+        {accentBar}
         {content}
       </Pressable>
     );
@@ -182,6 +189,7 @@ export function OrderCard({
       style={[styles.card, highlighted && styles.cardHighlighted]}
       testID={`order_card_${order.orderNumber}`}
     >
+      {accentBar}
       {content}
     </View>
   );
@@ -189,12 +197,21 @@ export function OrderCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: Radius.xl,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     padding: Spacing.md,
+    paddingLeft: Spacing.md + 4,
     gap: 10,
+    overflow: 'hidden',
+  },
+  accent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
   },
   cardSelected: {
     borderColor: Colors.primary,
@@ -202,9 +219,13 @@ const styles = StyleSheet.create({
   cardHighlighted: {
     borderColor: Colors.info,
     borderWidth: 2,
+    shadowColor: Colors.info,
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
   },
   cardPressed: {
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.surfaceElevated,
   },
   headerRow: {
     flexDirection: 'row',
@@ -221,14 +242,14 @@ const styles = StyleSheet.create({
   justInPill: {
     backgroundColor: Colors.infoMuted,
     borderWidth: 1,
-    borderColor: Colors.info,
+    borderColor: Colors.infoBorder,
     borderRadius: Radius.full,
     paddingHorizontal: 7,
     paddingVertical: 3,
   },
   justInText: {
+    fontFamily: Fonts.interBold,
     fontSize: 9,
-    fontWeight: '900',
     letterSpacing: 0.6,
     color: Colors.info,
   },
@@ -239,28 +260,28 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   orderNumber: {
-    fontSize: 20,
-    fontWeight: '900',
-    letterSpacing: -0.5,
+    fontFamily: Fonts.jakartaExtraBold,
+    fontSize: 18,
+    letterSpacing: -0.3,
+    fontVariant: tabular,
     color: Colors.textPrimary,
   },
   pinPill: {
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.surfaceElevated,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-    borderRadius: Radius.sm,
-    paddingHorizontal: 6,
+    borderColor: Colors.glassBorder,
+    borderRadius: Radius.full,
+    paddingHorizontal: 8,
     paddingVertical: 2,
   },
   pinText: {
+    ...Typography.mono,
     fontSize: 11,
-    fontWeight: '800',
-    fontFamily: 'monospace',
     color: Colors.textSecondary,
   },
   readOnlyNote: {
+    fontFamily: Fonts.interBold,
     fontSize: 10,
-    fontWeight: '700',
     letterSpacing: 0.4,
     color: Colors.textMuted,
     textTransform: 'uppercase',
@@ -276,11 +297,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   customerName: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontFamily: Fonts.interSemiBold,
+    fontSize: 15,
     color: Colors.textPrimary,
   },
   customerPhone: {
+    ...Typography.mono,
     fontSize: 12,
     color: Colors.textMuted,
   },
@@ -289,19 +311,21 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   receivedLabel: {
+    fontFamily: Fonts.interBold,
     fontSize: 9,
-    fontWeight: '800',
     letterSpacing: 0.5,
     color: Colors.textMuted,
   },
   elapsed: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 12,
-    fontWeight: '900',
+    fontVariant: tabular,
     color: Colors.warning,
   },
   countdown: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 10,
-    fontWeight: '700',
+    fontVariant: tabular,
     color: Colors.textSecondary,
   },
   countdownOverdue: {
@@ -309,7 +333,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: Colors.surfaceBorder,
+    backgroundColor: Colors.surfaceBorderSubtle,
   },
   items: {
     gap: 6,
@@ -322,36 +346,40 @@ const styles = StyleSheet.create({
   qtyBox: {
     width: 26,
     height: 24,
-    borderRadius: 4,
+    borderRadius: Radius.sm,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-    backgroundColor: Colors.surfaceHighlight,
+    borderColor: Colors.glassBorder,
+    backgroundColor: Colors.glassFillStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   qtyText: {
+    fontFamily: Fonts.interBold,
     fontSize: 11,
-    fontWeight: '800',
-    color: Colors.primary,
+    fontVariant: tabular,
+    color: Colors.primaryText,
   },
   itemName: {
     flex: 1,
+    fontFamily: Fonts.interMedium,
     fontSize: 13,
     color: Colors.textPrimary,
   },
   itemPrice: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 13,
-    fontWeight: '600',
+    fontVariant: tabular,
     color: Colors.textSecondary,
   },
   notes: {
+    fontFamily: Fonts.interRegular,
     fontSize: 11,
     fontStyle: 'italic',
     color: Colors.warning,
   },
   rejectionReason: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 11,
-    fontWeight: '600',
     color: Colors.error,
   },
   totalRow: {
@@ -361,19 +389,22 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   totalLabel: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 15,
-    fontWeight: '900',
+    fontVariant: tabular,
     color: Colors.textPrimary,
   },
   channelPill: {
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.glassFillStrong,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
     borderRadius: Radius.sm,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
   channelText: {
+    fontFamily: Fonts.interBold,
     fontSize: 9,
-    fontWeight: '800',
     letterSpacing: 0.5,
     color: Colors.textMuted,
   },

@@ -25,7 +25,8 @@ import { filterLedger, orderFilterOptions, OrderFilter } from '../../lib/domain'
 import { branchDisplayName } from '../../lib/branchLabel';
 import { formatCurrency } from '../../lib/format';
 import { useApp } from '../../state/AppProvider';
-import { Colors, Radius, Spacing } from '../../theme/colors';
+import { Colors, Layout, Radius, Spacing } from '../../theme/colors';
+import { Fonts, Typography } from '../../theme/typography';
 import { Order } from '../../types';
 
 export default function OrdersBoardScreen() {
@@ -301,13 +302,13 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.md,
-    paddingBottom: 32,
+    paddingBottom: Layout.bottomClearance,
     flexGrow: 1,
   },
   splitListContent: {
     paddingHorizontal: Spacing.md,
     paddingVertical: 12,
-    paddingBottom: 24,
+    paddingBottom: Layout.bottomClearance,
     flexGrow: 1,
   },
   listSeparator: {
@@ -323,13 +324,10 @@ const styles = StyleSheet.create({
     fontSize: 42,
   },
   emptyTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: Colors.textPrimary,
+    ...Typography.cardTitle,
   },
   emptySub: {
-    fontSize: 12,
-    lineHeight: 17,
+    ...Typography.cardDescription,
     color: Colors.textMuted,
     textAlign: 'center',
     maxWidth: 280,
@@ -343,7 +341,7 @@ const styles = StyleSheet.create({
   },
   splitDivider: {
     width: 1,
-    backgroundColor: Colors.surfaceBorder,
+    backgroundColor: Colors.surfaceBorderSubtle,
   },
   splitDetail: {
     flex: 0.8,
@@ -351,66 +349,66 @@ const styles = StyleSheet.create({
   },
   detailContent: {
     padding: Spacing.md,
+    paddingBottom: Layout.bottomClearance,
     gap: 10,
   },
   detailTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: Colors.textPrimary,
+    ...Typography.cardTitle,
   },
   pinCard: {
     backgroundColor: Colors.surfaceElevated,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.primary,
+    borderColor: Colors.primaryBorder,
     alignItems: 'center',
     padding: Spacing.md,
     gap: 2,
   },
   pinLabel: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-    color: Colors.textMuted,
+    ...Typography.sectionLabel,
   },
   pinCode: {
     fontSize: 36,
-    fontWeight: '900',
+    lineHeight: 42,
     letterSpacing: 4,
-    fontFamily: 'monospace',
-    color: Colors.primary,
+    fontFamily: Fonts.jakartaExtraBold,
+    fontVariant: ['tabular-nums'],
+    color: Colors.primaryText,
   },
   detailCustomer: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 15,
-    fontWeight: '800',
     color: Colors.textPrimary,
   },
   detailPhone: {
+    ...Typography.mono,
     fontSize: 13,
     color: Colors.textMuted,
   },
   detailDivider: {
     height: 1,
-    backgroundColor: Colors.surfaceBorder,
+    backgroundColor: Colors.surfaceBorderSubtle,
   },
   checklistTitle: {
+    fontFamily: Fonts.interBold,
     fontSize: 12,
-    fontWeight: '800',
     color: Colors.textSecondary,
   },
   checklistItem: {
+    fontFamily: Fonts.interRegular,
     fontSize: 13,
     lineHeight: 19,
     color: Colors.textPrimary,
   },
   detailNote: {
+    fontFamily: Fonts.interRegular,
     fontSize: 11,
     fontStyle: 'italic',
     color: Colors.warning,
   },
   detailRejection: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 11,
-    fontWeight: '600',
     color: Colors.error,
   },
   detailFooter: {
@@ -418,8 +416,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   detailTotal: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 16,
-    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
     color: Colors.textPrimary,
   },
   emptyDetail: {
@@ -430,6 +429,7 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
   },
   emptyDetailText: {
+    fontFamily: Fonts.interRegular,
     fontSize: 13,
     color: Colors.textMuted,
     textAlign: 'center',

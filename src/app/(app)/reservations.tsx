@@ -15,7 +15,8 @@ import {
 } from '../../lib/domain';
 import { branchDisplayName } from '../../lib/branchLabel';
 import { useApp } from '../../state/AppProvider';
-import { Colors, Radius, Spacing } from '../../theme/colors';
+import { Colors, Layout, Radius, Spacing } from '../../theme/colors';
+import { Fonts, Typography } from '../../theme/typography';
 
 export default function ReservationsScreen() {
   const router = useRouter();
@@ -131,21 +132,22 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   lobbyPill: {
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.warningMuted,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-    borderRadius: Radius.md,
+    borderColor: Colors.warningBorder,
+    borderRadius: Radius.full,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
   lobbyText: {
+    fontFamily: Fonts.interBold,
     fontSize: 11,
-    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
     color: Colors.warning,
   },
   listContent: {
     padding: Spacing.md,
-    paddingBottom: 32,
+    paddingBottom: Layout.bottomClearance,
   },
   separator: {
     height: 12,
@@ -159,13 +161,10 @@ const styles = StyleSheet.create({
     fontSize: 40,
   },
   emptyTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: Colors.textPrimary,
+    ...Typography.cardTitle,
   },
   emptySub: {
-    fontSize: 12,
-    lineHeight: 17,
+    ...Typography.cardDescription,
     color: Colors.textMuted,
     textAlign: 'center',
     maxWidth: 280,

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Colors, Layout, Radius, Spacing } from '../theme/colors';
+import { Fonts } from '../theme/typography';
 import { FilterChipOption } from '../types';
 
 export interface HorizontalFilterChipsProps<T> {
@@ -85,16 +86,22 @@ const styles = StyleSheet.create({
   chipSelected: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
+    shadowColor: Colors.primary,
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 6,
   },
   chipPressed: {
     opacity: 0.85,
   },
   chipLabel: {
+    fontFamily: Fonts.jakartaSemiBold,
     fontSize: 13,
-    fontWeight: '600',
     color: Colors.textSecondary,
   },
   chipLabelSelected: {
+    fontFamily: Fonts.jakartaBold,
     color: Colors.white,
   },
   countPill: {
@@ -104,11 +111,11 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   countPillSelected: {
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    backgroundColor: 'rgba(15, 17, 23, 0.25)',
   },
   countText: {
+    fontFamily: Fonts.interBold,
     fontSize: 11,
-    fontWeight: '800',
     color: Colors.textMuted,
   },
   countTextSelected: {

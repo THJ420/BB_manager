@@ -38,6 +38,7 @@ import {
 import { useApp } from '../state/AppProvider';
 import { CreateBranchInput, createOwnerBranch } from '../services/branches';
 import { Colors, Layout, Radius, Spacing } from '../theme/colors';
+import { Fonts, Typography } from '../theme/typography';
 import { AnalyticsMetric, FilterChipOption, Reservation } from '../types';
 
 const RANGE_OPTIONS: Array<FilterChipOption<AnalyticsRangePreset>> = [
@@ -312,7 +313,7 @@ export function OwnerDashboard() {
               value={storeQuery}
               onChangeText={applyStoreQuery}
               placeholder="Search store, city or branch code"
-              placeholderTextColor={Colors.textMuted}
+              placeholderTextColor={Colors.placeholder}
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="search"
@@ -571,7 +572,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryMuted,
     borderWidth: 1,
     borderColor: Colors.primaryBorder,
-    borderRadius: Radius.md,
+    borderRadius: Radius.full,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
@@ -580,12 +581,16 @@ const styles = StyleSheet.create({
     height: 7,
     borderRadius: 4,
     backgroundColor: Colors.primary,
+    shadowColor: Colors.primary,
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
   },
   ownerBadgeText: {
+    fontFamily: Fonts.interBold,
     fontSize: 10,
-    fontWeight: '900',
     letterSpacing: 0.5,
-    color: Colors.primary,
+    color: Colors.primaryText,
   },
   searchShell: {
     paddingHorizontal: Spacing.md,
@@ -606,7 +611,7 @@ const styles = StyleSheet.create({
     minHeight: Layout.minTouch,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorderStrong,
     borderRadius: Radius.full,
     paddingHorizontal: Spacing.md,
   },
@@ -614,8 +619,8 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: Layout.minTouch,
     paddingVertical: 0,
+    fontFamily: Fonts.interMedium,
     fontSize: 14,
-    fontWeight: '600',
     color: Colors.textPrimary,
   },
   searchClear: {
@@ -624,25 +629,25 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.glassFillStrong,
   },
   searchClearPressed: {
     opacity: 0.7,
   },
   searchClearText: {
+    fontFamily: Fonts.interBold,
     fontSize: 12,
-    fontWeight: '900',
     color: Colors.textSecondary,
   },
   searchMeta: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 10,
-    fontWeight: '700',
     color: Colors.textMuted,
     paddingHorizontal: 4,
   },
   storeNotice: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 11,
-    fontWeight: '700',
     color: Colors.success,
     paddingHorizontal: 4,
   },
@@ -651,30 +656,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    marginHorizontal: Spacing.md,
+    marginBottom: Spacing.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     backgroundColor: Colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
   },
   rangeSummaryText: {
     flex: 1,
     gap: 2,
   },
   rangeSummaryLabel: {
+    ...Typography.sectionLabel,
     fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 1,
-    color: Colors.textMuted,
   },
   rangeSummaryValue: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 13,
-    fontWeight: '800',
     color: Colors.textPrimary,
   },
   content: {
     padding: Spacing.md,
-    paddingBottom: 32,
+    paddingBottom: Layout.bottomClearance,
     gap: Spacing.md,
   },
   statStrip: {
@@ -686,23 +692,23 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     paddingVertical: Spacing.sm,
     paddingHorizontal: 10,
     gap: 2,
   },
   statStripLabel: {
+    ...Typography.sectionLabel,
     fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 0.6,
-    color: Colors.textMuted,
   },
   statStripValue: {
+    fontFamily: Fonts.jakartaExtraBold,
     fontSize: 18,
-    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
     color: Colors.textPrimary,
   },
   statStripMeta: {
+    fontFamily: Fonts.interRegular,
     fontSize: 9,
     color: Colors.textMuted,
   },
@@ -720,7 +726,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: Radius.xl,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     padding: Spacing.md,
     gap: Spacing.sm,
   },
@@ -731,14 +737,13 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   sectionLabel: {
+    ...Typography.sectionLabel,
     fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.8,
     color: Colors.textSecondary,
   },
   cardMeta: {
+    fontFamily: Fonts.interBold,
     fontSize: 9,
-    fontWeight: '800',
     letterSpacing: 0.5,
     color: Colors.textMuted,
   },
@@ -748,7 +753,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     borderRadius: Radius.md,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
+    borderBottomColor: Colors.surfaceBorderSubtle,
   },
   branchIdentity: {
     gap: 2,
@@ -766,8 +771,8 @@ const styles = StyleSheet.create({
     flex: 1.6,
   },
   statLabel: {
+    fontFamily: Fonts.interBold,
     fontSize: 8,
-    fontWeight: '900',
     letterSpacing: 0.5,
     color: Colors.textMuted,
   },
@@ -780,32 +785,36 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   branchCode: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 12,
-    fontWeight: '900',
     letterSpacing: 0.6,
-    color: Colors.primary,
+    color: Colors.primaryText,
   },
   branchName: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 13,
-    fontWeight: '800',
     lineHeight: 18,
     color: Colors.textPrimary,
   },
   branchMeta: {
+    fontFamily: Fonts.interRegular,
     fontSize: 9,
     color: Colors.textMuted,
   },
   numberValue: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 13,
-    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
     color: Colors.textPrimary,
   },
   revenueValue: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 13,
-    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
     color: Colors.success,
   },
   emptyText: {
+    fontFamily: Fonts.interRegular,
     fontSize: 12,
     lineHeight: 17,
     color: Colors.textMuted,

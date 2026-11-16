@@ -1,6 +1,7 @@
 import React, { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Colors, Layout, Spacing } from '../theme/colors';
+import { Typography } from '../theme/typography';
 
 export interface ScreenHeaderProps {
   title: string;
@@ -9,7 +10,7 @@ export interface ScreenHeaderProps {
   bottom?: ReactNode;
 }
 
-/** Charcoal top bar shared by every operational screen. */
+/** Obsidian top bar shared by every operational screen. */
 export function ScreenHeader({ title, subtitle, right, bottom }: ScreenHeaderProps) {
   return (
     <View style={styles.wrap}>
@@ -33,16 +34,17 @@ export function ScreenHeader({ title, subtitle, right, bottom }: ScreenHeaderPro
 
 const styles = StyleSheet.create({
   wrap: {
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
+    borderBottomColor: Colors.surfaceBorderSubtle,
     paddingHorizontal: Layout.headerPaddingH,
-    paddingVertical: Layout.headerPaddingV,
+    paddingTop: Layout.headerPaddingV,
+    paddingBottom: Spacing.spaceMd,
     gap: 8,
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: Spacing.sm,
   },
@@ -51,19 +53,15 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   title: {
-    fontSize: 20,
-    fontWeight: '900',
-    letterSpacing: -0.5,
-    color: Colors.textPrimary,
+    ...Typography.screenTitle,
   },
   subtitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.textMuted,
+    ...Typography.screenSubtitle,
   },
   right: {
     alignItems: 'flex-end',
     flexShrink: 0,
+    paddingTop: 4,
   },
   bottom: {
     flexDirection: 'row',

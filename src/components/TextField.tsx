@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   KeyboardTypeOptions,
   StyleProp,
@@ -9,6 +9,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { Colors, Layout, Radius } from '../theme/colors';
+import { Fonts, Typography } from '../theme/typography';
 
 export interface TextFieldProps {
   label?: string;
@@ -29,7 +30,7 @@ export interface TextFieldProps {
   accessibilityLabel?: string;
 }
 
-/** Material 3 outlined field with a 48dp tap target and indigo focus state. */
+/** Hollow obsidian field with a 48dp tap target and indigo focus state. */
 export function TextField({
   label,
   value,
@@ -48,6 +49,8 @@ export function TextField({
   maxLength,
   accessibilityLabel,
 }: TextFieldProps) {
+  const [focused, setFocused] = useState(false);
+
   return (
     <View style={[styles.group, style]}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
@@ -55,6 +58,7 @@ export function TextField({
         style={[
           styles.field,
           multiline && styles.fieldMultiline,
+          focused && styles.fieldFocused,
           Boolean(errorText) && styles.fieldError,
           !editable && styles.fieldDisabled,
         ]}
@@ -69,7 +73,7 @@ export function TextField({
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
-          placeholderTextColor={Colors.textMuted}
+          placeholderTextColor={Colors.placeholder}
           secureTextEntry={secureTextEntry}
           keyboardType={keyboardType}
           autoCapitalize={autoCapitalize}
@@ -81,6 +85,8 @@ export function TextField({
           maxLength={maxLength}
           testID={testID}
           accessibilityLabel={accessibilityLabel ?? label ?? placeholder}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
         />
       </View>
       {errorText ? <Text style={styles.error}>{errorText}</Text> : null}
@@ -93,11 +99,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   label: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-    color: Colors.textSecondary,
+    ...Typography.sectionLabel,
   },
   field: {
     flexDirection: 'row',
@@ -105,8 +107,8 @@ const styles = StyleSheet.create({
     minHeight: Layout.minTouch,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-    backgroundColor: Colors.surfaceElevated,
+    borderColor: Colors.glassBorderStrong,
+    backgroundColor: Colors.surface,
     paddingHorizontal: 12,
     gap: 4,
   },
@@ -114,6 +116,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     minHeight: 88,
     paddingVertical: 10,
+  },
+  fieldFocused: {
+    borderColor: Colors.primary,
   },
   fieldError: {
     borderColor: Colors.error,
@@ -125,13 +130,14 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
   },
   prefix: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 15,
-    fontWeight: '800',
     color: Colors.textMuted,
   },
   input: {
     flex: 1,
     minHeight: Layout.minTouch,
+    fontFamily: Fonts.interRegular,
     fontSize: 14,
     color: Colors.textPrimary,
     paddingVertical: 0,
@@ -141,7 +147,7 @@ const styles = StyleSheet.create({
     paddingTop: 2,
   },
   error: {
-    fontSize: 11,
+    ...Typography.caption,
     color: Colors.error,
   },
 });

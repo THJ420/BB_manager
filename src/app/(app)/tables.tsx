@@ -29,6 +29,7 @@ import {
 import { useApp } from '../../state/AppProvider';
 import { canCreateTables, canDeleteTables } from '../../services/branchScope';
 import { Colors, Layout, Radius, Spacing } from '../../theme/colors';
+import { Fonts, Typography } from '../../theme/typography';
 import { DiningTable, Reservation, ReservationStatus } from '../../types';
 
 type ViewMode = 'reservations' | 'tables';
@@ -192,8 +193,8 @@ export default function DiningTablesScreen() {
               <Switch
                 value={bookingsLive}
                 onValueChange={(value) => void toggleAcceptingReservations(value)}
-                trackColor={{ false: Colors.errorMuted, true: Colors.successMuted }}
-                thumbColor={bookingsLive ? Colors.success : Colors.error}
+                trackColor={{ false: Colors.switchTrackOff, true: Colors.success }}
+                thumbColor={bookingsLive ? Colors.white : Colors.error}
                 ios_backgroundColor={Colors.switchTrackOff}
                 hitSlop={{ top: 10, bottom: 10, left: 2, right: 2 }}
                 testID="global_reservation_master_switch"
@@ -412,16 +413,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   lobbyPill: {
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.warningMuted,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-    borderRadius: Radius.md,
+    borderColor: Colors.warningBorder,
+    borderRadius: Radius.full,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
   lobbyText: {
+    fontFamily: Fonts.interBold,
     fontSize: 11,
-    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
     color: Colors.warning,
   },
   masterCard: {
@@ -452,16 +454,17 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   statusLabel: {
+    fontFamily: Fonts.interBold,
     fontSize: 10,
-    fontWeight: '900',
     letterSpacing: 0.5,
   },
   masterTitle: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 14,
-    fontWeight: '800',
     color: Colors.textPrimary,
   },
   masterSubtitle: {
+    fontFamily: Fonts.interRegular,
     fontSize: 11,
     lineHeight: 15,
     color: Colors.textMuted,
@@ -475,7 +478,7 @@ const styles = StyleSheet.create({
   reservationList: {
     paddingHorizontal: Spacing.md,
     paddingTop: Spacing.sm,
-    paddingBottom: 32,
+    paddingBottom: Layout.bottomClearance,
     flexGrow: 1,
   },
   separator: {
@@ -483,7 +486,7 @@ const styles = StyleSheet.create({
   },
   tablesContent: {
     padding: Spacing.md,
-    paddingBottom: 32,
+    paddingBottom: Layout.bottomClearance,
     gap: 12,
     flexGrow: 1,
   },
@@ -491,12 +494,10 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   sectionLabel: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-    color: Colors.textMuted,
+    ...Typography.sectionLabel,
   },
   sectionHint: {
+    fontFamily: Fonts.interRegular,
     fontSize: 11,
     lineHeight: 15,
     color: Colors.textMuted,
@@ -512,13 +513,10 @@ const styles = StyleSheet.create({
     fontSize: 40,
   },
   emptyTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: Colors.textPrimary,
+    ...Typography.cardTitle,
   },
   emptySub: {
-    fontSize: 12,
-    lineHeight: 17,
+    ...Typography.cardDescription,
     color: Colors.textMuted,
     textAlign: 'center',
     maxWidth: 280,

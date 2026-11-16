@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleProp, StyleSheet, Switch, Text, View, ViewStyle } from 'react-native';
 import { Colors, Layout } from '../theme/colors';
+import { Fonts } from '../theme/typography';
 
 export interface SwitchRowProps {
   title: string;
@@ -22,7 +23,6 @@ export function SwitchRow({
   value,
   onValueChange,
   activeColor = Colors.primary,
-  activeMuted = Colors.primaryMuted,
   inactiveColor = Colors.switchThumbOff,
   inactiveMuted = Colors.switchTrackOff,
   style,
@@ -37,8 +37,8 @@ export function SwitchRow({
       <Switch
         value={value}
         onValueChange={onValueChange}
-        trackColor={{ false: inactiveMuted, true: activeMuted }}
-        thumbColor={value ? activeColor : inactiveColor}
+        trackColor={{ false: inactiveMuted, true: activeColor }}
+        thumbColor={value ? Colors.white : inactiveColor}
         ios_backgroundColor={Colors.switchTrackOff}
         hitSlop={{ top: 10, bottom: 10, left: 2, right: 2 }}
         testID={testID}
@@ -61,11 +61,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   title: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontFamily: Fonts.interSemiBold,
+    fontSize: 14,
     color: Colors.textPrimary,
   },
   subtitle: {
+    fontFamily: Fonts.interRegular,
     fontSize: 11,
     lineHeight: 15,
     color: Colors.textSecondary,

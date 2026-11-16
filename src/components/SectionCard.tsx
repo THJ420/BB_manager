@@ -1,6 +1,7 @@
 import React, { ReactNode } from 'react';
 import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { Colors, Radius, Spacing } from '../theme/colors';
+import { Typography } from '../theme/typography';
 
 export interface SectionCardProps {
   title?: string;
@@ -12,13 +13,13 @@ export interface SectionCardProps {
 }
 
 const TONES: Record<NonNullable<SectionCardProps['tone']>, string> = {
-  default: Colors.surfaceBorder,
+  default: Colors.surfaceBorderSubtle,
   danger: Colors.errorBorder,
   success: Colors.successBorder,
   accent: Colors.primaryBorder,
 };
 
-/** Elevated #262626 card with the Material 3 hairline border. */
+/** Structural obsidian slab (#161922) with a hairline perimeter stroke. */
 export function SectionCard({
   title,
   right,
@@ -42,8 +43,8 @@ export function SectionCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: Radius.xl,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     overflow: 'hidden',
   },
@@ -56,15 +57,11 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.md,
   },
   title: {
+    ...Typography.sectionLabel,
     flexShrink: 1,
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    color: Colors.textMuted,
   },
   content: {
     padding: Spacing.md,
-    gap: 10,
+    gap: 12,
   },
 });

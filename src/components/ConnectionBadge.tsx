@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Colors, Radius } from '../theme/colors';
+import { Fonts } from '../theme/typography';
 import { ConnectionStatus } from '../types';
 
 const STATUS_META: Record<ConnectionStatus, { label: string; color: string; background: string }> = {
@@ -20,11 +21,11 @@ export function ConnectionBadge({ status, pendingOutboxCount }: ConnectionBadgeP
   return (
     <View style={styles.row}>
       <View
-        style={[styles.badge, { backgroundColor: meta.background, borderColor: meta.color }]}
+        style={[styles.badge, { backgroundColor: meta.background, borderColor: `${meta.color}40` }]}
         accessibilityLabel={`Connection ${meta.label}`}
         testID="connection_badge"
       >
-        <View style={[styles.dot, { backgroundColor: meta.color }]} />
+        <View style={[styles.dot, { backgroundColor: meta.color, shadowColor: meta.color }]} />
         <Text style={[styles.label, { color: meta.color }]} numberOfLines={1}>
           {meta.label}
         </Text>
@@ -55,26 +56,30 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   dot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    shadowOpacity: 0.8,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 0 },
   },
   label: {
+    fontFamily: Fonts.interBold,
     fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.6,
+    letterSpacing: 0.5,
   },
   queueBadge: {
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.surfaceElevated,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     borderRadius: Radius.full,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
   queueText: {
+    fontFamily: Fonts.interBold,
     fontSize: 10,
-    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
     color: Colors.warning,
   },
 });

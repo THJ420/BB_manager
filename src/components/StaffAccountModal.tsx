@@ -11,6 +11,7 @@ import {
   staffEmailFor,
 } from '../services/staff';
 import { Colors, Radius, Spacing } from '../theme/colors';
+import { Fonts, Typography } from '../theme/typography';
 
 export interface StaffFormValues {
   username: string;
@@ -192,10 +193,7 @@ export function StaffAccountModal({
 
 const styles = StyleSheet.create({
   label: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-    color: Colors.textMuted,
+    ...Typography.sectionLabel,
   },
   roleRow: {
     flexDirection: 'row',
@@ -213,29 +211,31 @@ const styles = StyleSheet.create({
     borderColor: Colors.primaryBorder,
   },
   roleChipOff: {
-    backgroundColor: Colors.surfaceHighlight,
-    borderColor: Colors.surfaceBorder,
+    backgroundColor: Colors.surfaceElevated,
+    borderColor: Colors.glassBorder,
   },
   roleText: {
+    fontFamily: Fonts.interBold,
     fontSize: 10,
-    fontWeight: '900',
     letterSpacing: 0.5,
     color: Colors.textMuted,
   },
   roleTextOn: {
-    color: Colors.primary,
+    color: Colors.primaryText,
   },
   preview: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 11,
-    fontWeight: '700',
-    color: Colors.primary,
+    color: Colors.primaryText,
   },
   note: {
+    fontFamily: Fonts.interRegular,
     fontSize: 11,
     lineHeight: 16,
     color: Colors.textMuted,
   },
   error: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 12,
     lineHeight: 17,
     color: Colors.error,

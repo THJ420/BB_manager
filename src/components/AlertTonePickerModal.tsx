@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ALERT_TONES } from '../lib/alertTones';
 import { playAlertTone, stopAlertTone } from '../services/alertTones';
 import { Colors, Layout, Radius } from '../theme/colors';
+import { Fonts } from '../theme/typography';
 import { AlertToneId } from '../types';
 import { ActionButton } from './ActionButton';
 import { ModalShell } from './ModalShell';
@@ -158,6 +159,7 @@ export function AlertTonePickerModal({
 
 const styles = StyleSheet.create({
   hint: {
+    fontFamily: Fonts.interRegular,
     fontSize: 12,
     lineHeight: 17,
     color: Colors.textSecondary,
@@ -173,7 +175,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceElevated,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     paddingLeft: 12,
     paddingRight: 8,
     paddingVertical: 6,
@@ -203,8 +205,8 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
   },
   radioCheck: {
+    fontFamily: Fonts.interBold,
     fontSize: 12,
-    fontWeight: '900',
     color: Colors.white,
   },
   toneText: {
@@ -212,11 +214,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   toneName: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 13,
-    fontWeight: '800',
     color: Colors.textPrimary,
   },
   toneDescription: {
+    fontFamily: Fonts.interRegular,
     fontSize: 10.5,
     color: Colors.textSecondary,
   },
@@ -225,8 +228,8 @@ const styles = StyleSheet.create({
     height: Layout.minTouch,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-    backgroundColor: Colors.surfaceHighlight,
+    borderColor: Colors.glassBorder,
+    backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -239,7 +242,7 @@ const styles = StyleSheet.create({
   },
   previewIcon: {
     fontSize: 15,
-    color: Colors.primary,
+    color: Colors.primaryText,
   },
   previewIconActive: {
     fontSize: 13,

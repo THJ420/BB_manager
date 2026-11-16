@@ -8,10 +8,11 @@ import { ScreenHeader } from '../../components/ScreenHeader';
 import { StatusBadge } from '../../components/StatusBadge';
 import { TextField } from '../../components/TextField';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
-import { filterLedger, OrderFilter } from '../../lib/domain';
+import { filterLedger, orderStatusBadge, OrderFilter } from '../../lib/domain';
 import { formatCurrency } from '../../lib/format';
 import { useApp } from '../../state/AppProvider';
-import { Colors, Radius, Spacing } from '../../theme/colors';
+import { Colors, Layout, Radius, Spacing } from '../../theme/colors';
+import { Fonts, Typography } from '../../theme/typography';
 import { FilterChipOption } from '../../types';
 
 function ledgerStamp(iso: string): string {
@@ -97,6 +98,12 @@ export default function PickupOrdersScreen() {
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         renderItem={({ item }) => (
           <View style={styles.card} testID={`ledger_card_${item.orderNumber}`}>
+            <View
+              style={[
+                styles.accent,
+                { backgroundColor: orderStatusBadge(item.status).foreground },
+              ]}
+            />
             <View style={styles.headerRow}>
               <View style={styles.idGroup}>
                 <Text style={styles.orderNumber}>#{item.orderNumber}</Text>
@@ -164,38 +171,47 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   recordsPill: {
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.glassFillStrong,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-    borderRadius: Radius.md,
+    borderColor: Colors.glassBorder,
+    borderRadius: Radius.full,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
   recordsText: {
+    fontFamily: Fonts.interBold,
     fontSize: 11,
-    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
     color: Colors.textSecondary,
   },
   searchWrap: {
-    backgroundColor: Colors.surface,
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    paddingTop: Spacing.sm,
   },
   listContent: {
     padding: Spacing.md,
-    paddingBottom: 32,
+    paddingBottom: Layout.bottomClearance,
     flexGrow: 1,
   },
   separator: {
     height: 12,
   },
   card: {
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: Radius.xl,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     padding: Spacing.md,
+    paddingLeft: Spacing.md + 4,
     gap: 8,
+    overflow: 'hidden',
+  },
+  accent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
   },
   headerRow: {
     flexDirection: 'row',
@@ -210,20 +226,23 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   orderNumber: {
+    fontFamily: Fonts.jakartaExtraBold,
     fontSize: 18,
-    fontWeight: '900',
+    letterSpacing: -0.3,
+    fontVariant: ['tabular-nums'],
     color: Colors.textPrimary,
   },
   pinPill: {
-    backgroundColor: Colors.surfaceHighlight,
-    borderRadius: Radius.sm,
-    paddingHorizontal: 6,
+    backgroundColor: Colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
+    borderRadius: Radius.full,
+    paddingHorizontal: 8,
     paddingVertical: 2,
   },
   pinText: {
+    ...Typography.mono,
     fontSize: 11,
-    fontWeight: '800',
-    fontFamily: 'monospace',
     color: Colors.textSecondary,
   },
   customerRow: {
@@ -237,21 +256,25 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   customerName: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 15,
-    fontWeight: '700',
     color: Colors.textPrimary,
   },
   customerPhone: {
+    ...Typography.mono,
     fontSize: 12,
     color: Colors.textMuted,
   },
   total: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 17,
-    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
     color: Colors.textPrimary,
   },
   itemsBox: {
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.glassFill,
+    borderWidth: 1,
+    borderColor: Colors.surfaceBorderSubtle,
     borderRadius: Radius.md,
     padding: 8,
     gap: 4,
@@ -262,19 +285,22 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   itemQty: {
+    fontFamily: Fonts.interBold,
     fontSize: 11,
-    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
     width: 22,
-    color: Colors.primary,
+    color: Colors.primaryText,
   },
   itemName: {
     flex: 1,
+    fontFamily: Fonts.interMedium,
     fontSize: 12,
     color: Colors.textPrimary,
   },
   itemPrice: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 12,
-    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
     color: Colors.textSecondary,
   },
   footerRow: {
@@ -285,19 +311,18 @@ const styles = StyleSheet.create({
     paddingTop: 2,
   },
   archiveLabel: {
+    ...Typography.sectionLabel,
     fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-    color: Colors.textMuted,
   },
   archiveMeta: {
+    fontFamily: Fonts.interBold,
     fontSize: 10,
-    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
     color: Colors.textMuted,
   },
   rejectionReason: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 11,
-    fontWeight: '600',
     color: Colors.error,
   },
   emptyState: {
@@ -309,13 +334,10 @@ const styles = StyleSheet.create({
     fontSize: 40,
   },
   emptyTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: Colors.textPrimary,
+    ...Typography.cardTitle,
   },
   emptySub: {
-    fontSize: 12,
-    lineHeight: 17,
+    ...Typography.cardDescription,
     color: Colors.textMuted,
     textAlign: 'center',
     maxWidth: 280,

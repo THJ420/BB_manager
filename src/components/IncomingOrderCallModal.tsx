@@ -3,6 +3,7 @@ import { Animated, Modal, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { formatCurrency } from '../lib/format';
 import { Colors, Radius, Spacing } from '../theme/colors';
+import { Fonts, Typography } from '../theme/typography';
 import { Order } from '../types';
 import { ActionButton } from './ActionButton';
 
@@ -135,7 +136,7 @@ export function IncomingOrderCallModal({
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#09090B',
+    backgroundColor: Colors.background,
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.md,
   },
@@ -151,10 +152,13 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: Colors.success,
+    shadowColor: Colors.success,
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
   },
   topLabel: {
-    fontSize: 10,
-    fontWeight: '900',
+    ...Typography.sectionLabel,
     letterSpacing: 1.1,
     color: Colors.textSecondary,
   },
@@ -182,29 +186,36 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: Colors.primary,
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 12,
   },
   ringIcon: {
     fontSize: 52,
   },
   callingLabel: {
+    fontFamily: Fonts.interBold,
     fontSize: 11,
-    fontWeight: '900',
     letterSpacing: 1.4,
     color: Colors.info,
   },
   orderNumber: {
+    fontFamily: Fonts.jakartaExtraBold,
     fontSize: 46,
-    fontWeight: '900',
     letterSpacing: -1.5,
+    fontVariant: ['tabular-nums'],
     color: Colors.textPrimary,
   },
   customerName: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 22,
-    fontWeight: '800',
     color: Colors.textPrimary,
     maxWidth: '90%',
   },
   customerPhone: {
+    ...Typography.mono,
     fontSize: 14,
     color: Colors.textSecondary,
   },
@@ -212,7 +223,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceElevated,
     borderRadius: Radius.xl,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     padding: Spacing.md,
     gap: 8,
   },
@@ -223,30 +234,25 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   totalLabel: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
+    ...Typography.sectionLabel,
     color: Colors.textSecondary,
   },
   totalValue: {
-    fontSize: 28,
-    fontWeight: '900',
+    ...Typography.metricValue,
     color: Colors.success,
   },
   divider: {
     height: 1,
-    backgroundColor: Colors.surfaceBorder,
+    backgroundColor: Colors.surfaceBorderSubtle,
   },
   sectionLabel: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
+    ...Typography.sectionLabel,
     color: Colors.textSecondary,
   },
   items: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 14,
     lineHeight: 20,
-    fontWeight: '600',
     color: Colors.textPrimary,
   },
   metaRow: {
@@ -255,16 +261,17 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   metaPill: {
-    backgroundColor: Colors.surfaceHighlight,
-    borderRadius: Radius.sm,
+    backgroundColor: Colors.glassFillStrong,
+    borderRadius: Radius.full,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-    paddingHorizontal: 8,
+    borderColor: Colors.glassBorder,
+    paddingHorizontal: 10,
     paddingVertical: 4,
   },
   metaText: {
+    fontFamily: Fonts.interBold,
     fontSize: 10,
-    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
     color: Colors.textSecondary,
   },
   actions: {
@@ -279,7 +286,8 @@ const styles = StyleSheet.create({
   hint: {
     marginTop: Spacing.sm,
     textAlign: 'center',
+    fontFamily: Fonts.interRegular,
     fontSize: 11,
-    color: Colors.textSecondary,
+    color: Colors.textMuted,
   },
 });

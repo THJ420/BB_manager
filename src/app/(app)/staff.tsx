@@ -17,7 +17,8 @@ import {
   StaffAccount,
 } from '../../services/staff';
 import { useApp } from '../../state/AppProvider';
-import { Colors, Radius, Spacing } from '../../theme/colors';
+import { Colors, Layout, Radius, Spacing } from '../../theme/colors';
+import { Fonts, Typography } from '../../theme/typography';
 
 export default function StaffManagementScreen() {
   const router = useRouter();
@@ -271,12 +272,13 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: Spacing.md,
-    paddingBottom: 32,
+    paddingBottom: Layout.bottomClearance,
   },
   separator: {
     height: 12,
   },
   intro: {
+    fontFamily: Fonts.interRegular,
     fontSize: 12,
     lineHeight: 17,
     color: Colors.textMuted,
@@ -286,7 +288,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     padding: Spacing.md,
     gap: 6,
   },
@@ -306,47 +308,47 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarText: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 13,
-    fontWeight: '900',
-    color: Colors.primary,
+    color: Colors.primaryText,
   },
   identity: {
     flex: 1,
     gap: 2,
   },
   name: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 14,
-    fontWeight: '800',
     color: Colors.textPrimary,
   },
   username: {
+    ...Typography.mono,
     fontSize: 12,
-    fontWeight: '700',
     color: Colors.textSecondary,
-    fontFamily: 'monospace',
   },
   rolePill: {
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.surfaceElevated,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     borderRadius: Radius.full,
     paddingHorizontal: 8,
     paddingVertical: 4,
     maxWidth: 120,
   },
   rolePillText: {
+    fontFamily: Fonts.interBold,
     fontSize: 8,
-    fontWeight: '900',
     letterSpacing: 0.4,
     color: Colors.textMuted,
   },
   meta: {
+    ...Typography.mono,
     fontSize: 11,
     color: Colors.textMuted,
   },
   scope: {
+    fontFamily: Fonts.interBold,
     fontSize: 10,
-    fontWeight: '800',
     color: Colors.success,
   },
   actions: {
@@ -367,6 +369,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   errorText: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 12,
     lineHeight: 17,
     color: Colors.error,
@@ -380,13 +383,10 @@ const styles = StyleSheet.create({
     fontSize: 40,
   },
   emptyTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: Colors.textPrimary,
+    ...Typography.cardTitle,
   },
   emptySub: {
-    fontSize: 12,
-    lineHeight: 17,
+    ...Typography.cardDescription,
     color: Colors.textMuted,
     textAlign: 'center',
     maxWidth: 280,

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Switch, Text, View } from 'react-native';
 import { Colors, Radius } from '../theme/colors';
+import { Fonts } from '../theme/typography';
 import { DaySchedule } from '../types';
 import { ActionButton } from './ActionButton';
 import { ModalShell } from './ModalShell';
@@ -109,7 +110,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceElevated,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     padding: 10,
     gap: 8,
   },
@@ -120,8 +121,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   dayName: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 14,
-    fontWeight: '800',
     color: Colors.textPrimary,
   },
   dayStatus: {
@@ -130,8 +131,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   dayStatusText: {
+    fontFamily: Fonts.interBold,
     fontSize: 11,
-    fontWeight: '800',
     letterSpacing: 0.4,
   },
   timeRow: {

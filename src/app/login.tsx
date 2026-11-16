@@ -16,6 +16,7 @@ import { ActionButton } from '../components/ActionButton';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { TextField } from '../components/TextField';
 import { Colors, Radius, Spacing } from '../theme/colors';
+import { Fonts } from '../theme/typography';
 import { useApp } from '../state/AppProvider';
 import { DEMO_EMAIL, DEMO_PASSWORD } from '../constants/branches';
 
@@ -202,12 +203,13 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   appName: {
+    fontFamily: Fonts.jakartaExtraBold,
     fontSize: 22,
-    fontWeight: '900',
     letterSpacing: 1.5,
     color: Colors.textPrimary,
   },
   tagline: {
+    fontFamily: Fonts.interRegular,
     fontSize: 12,
     color: Colors.textMuted,
     textAlign: 'center',
@@ -218,16 +220,17 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: Radius.xl,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     padding: 20,
     gap: 12,
   },
   cardTitle: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 18,
-    fontWeight: '900',
     color: Colors.textPrimary,
   },
   cardSubtitle: {
+    fontFamily: Fonts.interRegular,
     fontSize: 12,
     lineHeight: 17,
     color: Colors.textSecondary,
@@ -237,13 +240,13 @@ const styles = StyleSheet.create({
   errorBox: {
     backgroundColor: Colors.errorMuted,
     borderWidth: 1,
-    borderColor: Colors.error,
-    borderRadius: Radius.sm,
+    borderColor: Colors.errorBorder,
+    borderRadius: Radius.md,
     padding: 10,
   },
   errorText: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 12,
-    fontWeight: '600',
     color: Colors.error,
   },
   submit: {
@@ -255,12 +258,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   demoText: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 13,
-    fontWeight: '600',
-    color: Colors.primary,
+    color: Colors.primaryText,
   },
   footer: {
     marginTop: Spacing.lg,
+    fontFamily: Fonts.interRegular,
     fontSize: 11,
     color: Colors.textMuted,
     textAlign: 'center',

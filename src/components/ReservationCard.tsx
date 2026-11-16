@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Colors, Radius, Spacing } from '../theme/colors';
+import { Fonts, Typography } from '../theme/typography';
 import { arrivalTarget, reservationStatusBadge } from '../lib/domain';
 import { Reservation, ReservationStatus } from '../types';
 import { ActionButton } from './ActionButton';
@@ -41,7 +42,12 @@ export function ReservationCard({
               <Text style={styles.pillText}>{branchLabel}</Text>
             </View>
           ) : null}
-          <View style={[styles.badge, { backgroundColor: badge.background }]}>
+          <View
+            style={[
+              styles.badge,
+              { backgroundColor: badge.background, borderColor: `${badge.foreground}40` },
+            ]}
+          >
             <Text style={[styles.badgeText, { color: badge.foreground }]}>{badge.label}</Text>
           </View>
         </View>
@@ -98,10 +104,10 @@ export function ReservationCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: Radius.xl,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     padding: Spacing.md,
     gap: 6,
   },
@@ -118,27 +124,30 @@ const styles = StyleSheet.create({
   },
   time: {
     flexShrink: 1,
+    fontFamily: Fonts.jakartaBold,
     fontSize: 13,
-    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
     color: Colors.textPrimary,
   },
   badge: {
     borderRadius: Radius.full,
+    borderWidth: 1,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
   badgeText: {
+    fontFamily: Fonts.interBold,
     fontSize: 9,
-    fontWeight: '800',
     letterSpacing: 0.4,
   },
   customerName: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 16,
-    fontWeight: '800',
     color: Colors.textPrimary,
     marginTop: 2,
   },
   customerPhone: {
+    ...Typography.mono,
     fontSize: 12,
     color: Colors.textMuted,
   },
@@ -149,17 +158,20 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   pill: {
-    backgroundColor: Colors.surfaceHighlight,
-    borderRadius: Radius.sm,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    backgroundColor: Colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
+    borderRadius: Radius.md,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
   pillText: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 11,
-    fontWeight: '600',
     color: Colors.textSecondary,
   },
   requestedNote: {
+    fontFamily: Fonts.interRegular,
     fontSize: 10,
     fontStyle: 'italic',
     color: Colors.textMuted,
@@ -168,16 +180,18 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.warningMuted,
     borderWidth: 1,
     borderColor: Colors.warningBorder,
-    borderRadius: Radius.sm,
+    borderRadius: Radius.md,
     padding: 8,
     marginTop: 2,
   },
   noteText: {
+    fontFamily: Fonts.interRegular,
     fontSize: 11,
     fontStyle: 'italic',
     color: Colors.warning,
   },
   lockedNote: {
+    fontFamily: Fonts.interRegular,
     fontSize: 10,
     color: Colors.textMuted,
     marginTop: 4,

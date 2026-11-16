@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Colors } from '../theme/colors';
+import { Typography } from '../theme/typography';
 import { Order } from '../types';
 import { ActionButton } from './ActionButton';
 import { ModalShell } from './ModalShell';
@@ -116,6 +117,7 @@ export function RejectOrderModal({
 
 const styles = StyleSheet.create({
   hint: {
+    ...Typography.caption,
     fontSize: 12,
     color: Colors.textMuted,
   },

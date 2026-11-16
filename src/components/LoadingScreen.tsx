@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, Image, StyleSheet, Text, View } from 'react-native';
 import { Colors, Radius } from '../theme/colors';
+import { Fonts } from '../theme/typography';
 
 const TRACK_WIDTH = 168;
 const SLIDER_WIDTH = 64;
@@ -127,12 +128,13 @@ const styles = StyleSheet.create({
     height: 152,
   },
   name: {
+    fontFamily: Fonts.jakartaExtraBold,
     fontSize: 22,
-    fontWeight: '900',
     letterSpacing: 3,
     color: Colors.textPrimary,
   },
   tagline: {
+    fontFamily: Fonts.interMedium,
     fontSize: 12,
     letterSpacing: 0.4,
     color: Colors.textMuted,
@@ -142,7 +144,7 @@ const styles = StyleSheet.create({
     width: TRACK_WIDTH,
     height: 3,
     borderRadius: Radius.full,
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.glassFillStrong,
     overflow: 'hidden',
   },
   slider: {
@@ -150,11 +152,15 @@ const styles = StyleSheet.create({
     height: 3,
     borderRadius: Radius.full,
     backgroundColor: Colors.primary,
+    shadowColor: Colors.primary,
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
   },
   label: {
     marginTop: 6,
+    fontFamily: Fonts.interSemiBold,
     fontSize: 12,
-    fontWeight: '700',
     letterSpacing: 0.6,
     color: Colors.textMuted,
   },

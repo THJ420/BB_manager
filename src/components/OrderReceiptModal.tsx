@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Colors, Radius, Spacing } from '../theme/colors';
+import { Fonts, Typography } from '../theme/typography';
 import { formatCurrency, parseReservationTimestamp } from '../lib/format';
 import { exportReceiptPdf } from '../services/receiptPdf';
 import { Branch, Order } from '../types';
@@ -147,17 +148,16 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   pinPill: {
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.glassFillStrong,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-    borderRadius: Radius.sm,
-    paddingHorizontal: 8,
+    borderColor: Colors.glassBorder,
+    borderRadius: Radius.full,
+    paddingHorizontal: 10,
     paddingVertical: 3,
   },
   pinText: {
+    ...Typography.mono,
     fontSize: 11,
-    fontWeight: '800',
-    fontFamily: 'monospace',
     color: Colors.textSecondary,
   },
   row: {
@@ -167,19 +167,15 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     paddingVertical: 7,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
+    borderBottomColor: Colors.surfaceBorderSubtle,
   },
   rowLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: Colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    ...Typography.sectionLabel,
   },
   rowValue: {
     flexShrink: 1,
+    fontFamily: Fonts.interSemiBold,
     fontSize: 13,
-    fontWeight: '700',
     color: Colors.textPrimary,
     textAlign: 'right',
   },
@@ -188,11 +184,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   itemsTitle: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: Colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    ...Typography.sectionLabel,
   },
   itemRow: {
     flexDirection: 'row',
@@ -201,29 +193,32 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
+    borderBottomColor: Colors.surfaceBorderSubtle,
   },
   itemInfo: {
     flex: 1,
     gap: 2,
   },
   itemName: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 13,
-    fontWeight: '700',
     color: Colors.textPrimary,
   },
   itemQty: {
+    ...Typography.mono,
     fontSize: 11,
     color: Colors.textMuted,
   },
   itemNote: {
+    fontFamily: Fonts.interRegular,
     fontSize: 10,
     fontStyle: 'italic',
     color: Colors.warning,
   },
   itemTotal: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 13,
-    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
     color: Colors.textSecondary,
   },
   grandRow: {
@@ -232,21 +227,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: Spacing.sm,
     paddingTop: Spacing.sm,
-    borderTopWidth: 2,
-    borderTopColor: Colors.primary,
+    borderTopWidth: 1,
+    borderTopColor: Colors.primaryBorder,
   },
   grandLabel: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 13,
-    fontWeight: '900',
     letterSpacing: 1,
     color: Colors.textPrimary,
   },
   grandValue: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 17,
-    fontWeight: '900',
-    color: Colors.primary,
+    fontVariant: ['tabular-nums'],
+    color: Colors.primaryText,
   },
   notes: {
+    fontFamily: Fonts.interRegular,
     fontSize: 11,
     fontStyle: 'italic',
     color: Colors.warning,
@@ -256,14 +253,14 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   exportError: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 11,
-    fontWeight: '600',
     color: Colors.error,
     textAlign: 'center',
   },
   exportDone: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 11,
-    fontWeight: '600',
     color: Colors.success,
     textAlign: 'center',
   },
@@ -275,6 +272,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
   },
   busyText: {
+    fontFamily: Fonts.interRegular,
     fontSize: 11,
     color: Colors.textMuted,
   },

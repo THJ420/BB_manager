@@ -21,7 +21,8 @@ import {
   canDeleteMenuItems,
   canEditMenuDetails,
 } from '../../../services/branchScope';
-import { Colors, Spacing } from '../../../theme/colors';
+import { Colors, Layout, Spacing } from '../../../theme/colors';
+import { Typography } from '../../../theme/typography';
 import { MenuItem } from '../../../types';
 
 export default function MenuStockScreen() {
@@ -216,14 +217,13 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   searchWrap: {
-    backgroundColor: Colors.surface,
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    paddingTop: Spacing.sm,
   },
   gridContent: {
     paddingHorizontal: Spacing.md,
     paddingTop: Spacing.sm,
-    paddingBottom: 32,
+    paddingBottom: Layout.bottomClearance,
     gap: 12,
     flexGrow: 1,
   },
@@ -242,13 +242,10 @@ const styles = StyleSheet.create({
     fontSize: 40,
   },
   emptyTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: Colors.textPrimary,
+    ...Typography.cardTitle,
   },
   emptySub: {
-    fontSize: 12,
-    lineHeight: 17,
+    ...Typography.cardDescription,
     color: Colors.textMuted,
     textAlign: 'center',
     maxWidth: 280,

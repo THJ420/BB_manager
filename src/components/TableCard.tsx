@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Colors, Radius, Spacing } from '../theme/colors';
+import { Fonts } from '../theme/typography';
 import { tableCapacityLabel } from '../lib/domain';
 import { DiningTable } from '../types';
 
@@ -36,10 +37,10 @@ export function TableCard({ table, onEdit }: TableCardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: Radius.xl,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     padding: Spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
@@ -48,12 +49,12 @@ const styles = StyleSheet.create({
     minHeight: 84,
   },
   pressed: {
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.surfaceElevated,
   },
   name: {
     flex: 1,
+    fontFamily: Fonts.jakartaBold,
     fontSize: 16,
-    fontWeight: '700',
     color: Colors.textPrimary,
   },
   capacityGroup: {
@@ -65,21 +66,22 @@ const styles = StyleSheet.create({
     minWidth: 56,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.glassFillStrong,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     borderRadius: Radius.md,
     paddingVertical: 6,
     paddingHorizontal: 8,
   },
   capacityValue: {
+    fontFamily: Fonts.jakartaExtraBold,
     fontSize: 18,
-    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
     color: Colors.success,
   },
   capacityLabel: {
+    fontFamily: Fonts.interBold,
     fontSize: 8,
-    fontWeight: '900',
     letterSpacing: 0.6,
     color: Colors.textMuted,
   },

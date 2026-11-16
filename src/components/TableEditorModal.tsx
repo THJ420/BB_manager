@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { newDiningTableId } from '../lib/ids';
+import { Colors } from '../theme/colors';
 import { DiningTable } from '../types';
 import { ActionButton } from './ActionButton';
 import { ModalShell } from './ModalShell';
@@ -130,6 +131,6 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: '#333333',
+    backgroundColor: Colors.surfaceBorderSubtle,
   },
 });

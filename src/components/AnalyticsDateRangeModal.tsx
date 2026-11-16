@@ -8,6 +8,7 @@ import {
   validateCustomAnalyticsRange,
 } from '../lib/analytics';
 import { Colors, Radius } from '../theme/colors';
+import { Fonts, Typography } from '../theme/typography';
 import { ActionButton } from './ActionButton';
 import { ModalShell } from './ModalShell';
 import { TextField } from './TextField';
@@ -148,6 +149,7 @@ export function AnalyticsDateRangeModal({
 
 const styles = StyleSheet.create({
   hint: {
+    fontFamily: Fonts.interRegular,
     fontSize: 12,
     lineHeight: 17,
     color: Colors.textMuted,
@@ -156,10 +158,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   quickLabel: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-    color: Colors.textMuted,
+    ...Typography.sectionLabel,
   },
   quickRow: {
     flexDirection: 'row',
@@ -183,9 +182,9 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   errorText: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 12,
     lineHeight: 16,
-    fontWeight: '600',
     color: Colors.error,
   },
   footerButton: {

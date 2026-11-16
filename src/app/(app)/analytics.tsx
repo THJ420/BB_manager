@@ -22,7 +22,8 @@ import {
 import { formatCurrency, formatPercent } from '../../lib/format';
 import { useApp } from '../../state/AppProvider';
 import { OwnerDashboard } from '../../components/OwnerDashboard';
-import { Colors, Radius, Spacing } from '../../theme/colors';
+import { Colors, Layout, Radius, Spacing } from '../../theme/colors';
+import { Fonts, Typography } from '../../theme/typography';
 import { FilterChipOption } from '../../types';
 
 const RANGE_OPTIONS: Array<FilterChipOption<AnalyticsRangePreset>> = [
@@ -376,7 +377,7 @@ function BreakdownRow({
   return (
     <View style={[styles.breakdownRow, !last && styles.breakdownRowBorder]}>
       <View style={styles.breakdownLabelGroup}>
-        <View style={[styles.dot, { backgroundColor: color }]} />
+        <View style={[styles.dot, { backgroundColor: color, shadowColor: color }]} />
         <Text style={styles.breakdownLabel}>{label}</Text>
       </View>
       <Text style={styles.breakdownValue}>{count} tickets</Text>
@@ -404,9 +405,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.successMuted,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.successBorder,
     borderRadius: Radius.full,
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -416,10 +417,14 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: Colors.success,
+    shadowColor: Colors.success,
+    shadowOpacity: 0.8,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 0 },
   },
   shiftText: {
+    fontFamily: Fonts.interBold,
     fontSize: 10,
-    fontWeight: '900',
     letterSpacing: 0.5,
     color: Colors.success,
   },
@@ -434,26 +439,24 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
   },
   rangeSummaryText: {
     flex: 1,
     gap: 2,
   },
   rangeSummaryLabel: {
+    ...Typography.sectionLabel,
     fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-    color: Colors.textMuted,
   },
   rangeSummaryValue: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 11,
-    fontWeight: '700',
     color: Colors.textPrimary,
   },
   content: {
     padding: Spacing.md,
-    paddingBottom: 32,
+    paddingBottom: Layout.bottomClearance,
     gap: 12,
   },
   metricGrid: {
@@ -469,7 +472,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: Radius.xl,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     padding: Spacing.md,
     gap: 6,
   },
@@ -484,10 +487,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   sectionLabel: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-    color: Colors.textMuted,
+    ...Typography.sectionLabel,
   },
   efficiencyValueRow: {
     flexDirection: 'row',
@@ -496,12 +496,13 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   efficiencyValue: {
+    fontFamily: Fonts.jakartaExtraBold,
     fontSize: 24,
-    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
   },
   efficiencyNote: {
+    fontFamily: Fonts.interBold,
     fontSize: 10,
-    fontWeight: '800',
     paddingBottom: 3,
   },
   gradePill: {
@@ -511,10 +512,11 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   gradeText: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 11,
-    fontWeight: '900',
   },
   efficiencySub: {
+    fontFamily: Fonts.interRegular,
     fontSize: 11,
     lineHeight: 15,
     color: Colors.textMuted,
@@ -523,7 +525,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: Radius.xl,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     padding: Spacing.md,
     gap: 10,
   },
@@ -534,8 +536,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   cardMeta: {
+    fontFamily: Fonts.interBold,
     fontSize: 10,
-    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
     color: Colors.textSecondary,
   },
   peakList: {
@@ -557,29 +560,33 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   peakSlot: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 12,
-    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
     color: Colors.textPrimary,
   },
   peakSlotActive: {
     color: Colors.warning,
-    fontWeight: '900',
+    fontFamily: Fonts.jakartaBold,
   },
   peakBadge: {
     backgroundColor: Colors.warningMuted,
-    borderRadius: Radius.sm,
-    paddingHorizontal: 5,
+    borderWidth: 1,
+    borderColor: Colors.warningBorder,
+    borderRadius: Radius.full,
+    paddingHorizontal: 6,
     paddingVertical: 1,
   },
   peakBadgeText: {
+    fontFamily: Fonts.interBold,
     fontSize: 8,
-    fontWeight: '900',
     color: Colors.warning,
     letterSpacing: 0.4,
   },
   peakVolume: {
+    fontFamily: Fonts.interMedium,
     fontSize: 10,
-    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
     color: Colors.textMuted,
   },
   barTrack: {
@@ -587,7 +594,7 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     overflow: 'hidden',
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.glassFillStrong,
   },
   barFill: {
     height: '100%',
@@ -597,7 +604,7 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     overflow: 'hidden',
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.glassFillStrong,
     marginVertical: 4,
   },
   distributionSegment: {
@@ -615,7 +622,7 @@ const styles = StyleSheet.create({
   },
   breakdownRowBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
+    borderBottomColor: Colors.surfaceBorderSubtle,
   },
   breakdownLabelGroup: {
     flexDirection: 'row',
@@ -627,14 +634,19 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
   },
   breakdownLabel: {
+    fontFamily: Fonts.interRegular,
     fontSize: 12,
     color: Colors.textPrimary,
   },
   breakdownValue: {
+    fontFamily: Fonts.interBold,
     fontSize: 12,
-    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
     color: Colors.textSecondary,
   },
   snapshotGrid: {
@@ -645,40 +657,39 @@ const styles = StyleSheet.create({
   snapshotTile: {
     flexGrow: 1,
     flexBasis: '46%',
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.glassFill,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     padding: 10,
     gap: 2,
   },
   snapshotLabel: {
+    ...Typography.sectionLabel,
     fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-    color: Colors.textMuted,
   },
   snapshotValue: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 16,
-    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
     color: Colors.textPrimary,
   },
   advisory: {
     backgroundColor: Colors.surfaceElevated,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.primaryMuted,
+    borderColor: Colors.primaryBorder,
     padding: 14,
     gap: 4,
   },
   advisoryLabel: {
+    fontFamily: Fonts.interBold,
     fontSize: 10,
-    fontWeight: '900',
     letterSpacing: 0.8,
-    color: Colors.primary,
+    color: Colors.primaryText,
   },
   advisoryText: {
+    fontFamily: Fonts.interRegular,
     fontSize: 12,
     lineHeight: 17,
     color: Colors.textSecondary,

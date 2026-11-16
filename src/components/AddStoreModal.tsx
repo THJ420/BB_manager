@@ -9,6 +9,7 @@ import {
   storeNameSuggestion,
 } from '../services/branches';
 import { Colors, Spacing } from '../theme/colors';
+import { Fonts } from '../theme/typography';
 
 export interface AddStoreModalProps {
   visible: boolean;
@@ -200,22 +201,25 @@ export function AddStoreModal({
 
 const styles = StyleSheet.create({
   preview: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 11,
-    fontWeight: '700',
-    color: Colors.primary,
+    color: Colors.primaryText,
   },
   hint: {
+    fontFamily: Fonts.interRegular,
     fontSize: 10,
     lineHeight: 14,
     color: Colors.textMuted,
     marginTop: -Spacing.xs,
   },
   note: {
+    fontFamily: Fonts.interRegular,
     fontSize: 11,
     lineHeight: 16,
     color: Colors.textMuted,
   },
   error: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 12,
     lineHeight: 17,
     color: Colors.error,

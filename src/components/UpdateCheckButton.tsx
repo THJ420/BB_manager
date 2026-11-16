@@ -5,6 +5,7 @@ import { DialogModal } from './DialogModal';
 import { useApp } from '../state/AppProvider';
 import { currentAppVersion } from '../services/updater';
 import { Colors, Spacing } from '../theme/colors';
+import { Fonts } from '../theme/typography';
 
 /**
  * Manual "Check for Updates" trigger shared by terminal settings and the
@@ -75,6 +76,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   hint: {
+    fontFamily: Fonts.interRegular,
     fontSize: 11,
     lineHeight: 16,
     color: Colors.textSecondary,

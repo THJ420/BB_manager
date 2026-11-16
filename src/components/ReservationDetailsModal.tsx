@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Colors, Radius, Spacing } from '../theme/colors';
+import { Fonts, Typography } from '../theme/typography';
 import { arrivalTarget, reservationStatusBadge } from '../lib/domain';
 import {
   formatDurationMinutes,
@@ -120,7 +121,12 @@ export function ReservationDetailsModal({
       }
     >
       <View style={styles.badgeRow}>
-        <View style={[styles.badge, { backgroundColor: badge.background }]}>
+        <View
+          style={[
+            styles.badge,
+            { backgroundColor: badge.background, borderColor: `${badge.foreground}40` },
+          ]}
+        >
           <Text style={[styles.badgeText, { color: badge.foreground }]}>{badge.label}</Text>
         </View>
       </View>
@@ -164,12 +170,13 @@ const styles = StyleSheet.create({
   },
   badge: {
     borderRadius: Radius.full,
+    borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
   badgeText: {
+    fontFamily: Fonts.interBold,
     fontSize: 10,
-    fontWeight: '800',
     letterSpacing: 0.4,
   },
   row: {
@@ -179,23 +186,20 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
+    borderBottomColor: Colors.surfaceBorderSubtle,
   },
   rowLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: Colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    ...Typography.sectionLabel,
   },
   rowValue: {
     flexShrink: 1,
+    fontFamily: Fonts.interSemiBold,
     fontSize: 13,
-    fontWeight: '700',
     color: Colors.textPrimary,
     textAlign: 'right',
   },
   requestedNote: {
+    fontFamily: Fonts.interRegular,
     fontSize: 11,
     fontStyle: 'italic',
     color: Colors.warning,
@@ -206,19 +210,17 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.warningMuted,
     borderWidth: 1,
     borderColor: Colors.warningBorder,
-    borderRadius: Radius.sm,
+    borderRadius: Radius.md,
     padding: Spacing.sm,
     marginTop: Spacing.sm,
     gap: 4,
   },
   noteLabel: {
-    fontSize: 10,
-    fontWeight: '800',
+    ...Typography.sectionLabel,
     color: Colors.warning,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
   },
   noteText: {
+    fontFamily: Fonts.interRegular,
     fontSize: 12,
     fontStyle: 'italic',
     color: Colors.warning,
@@ -228,6 +230,7 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   lockedNote: {
+    fontFamily: Fonts.interRegular,
     fontSize: 11,
     color: Colors.textMuted,
     textAlign: 'center',

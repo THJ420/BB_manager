@@ -1,7 +1,7 @@
 import { Redirect, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActionButton } from '../../components/ActionButton';
 import { AlertTonePickerModal } from '../../components/AlertTonePickerModal';
 import { ConnectionBadge } from '../../components/ConnectionBadge';
@@ -21,7 +21,8 @@ import { initials, roleLabel } from '../../lib/format';
 import { currentAppVersion } from '../../services/updater';
 import { useApp } from '../../state/AppProvider';
 import type { SyncDiagnosticsReport } from '../../state/AppProvider';
-import { Colors, Radius, Spacing } from '../../theme/colors';
+import { Colors, Layout, Radius, Spacing } from '../../theme/colors';
+import { Fonts, Typography } from '../../theme/typography';
 import {
   AlertToneId,
   Branch,
@@ -41,6 +42,7 @@ const CONNECTION_MODES: Array<{ id: ConnectionStatus; label: string }> = [
 
 export default function TerminalSettingsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const {
     state,
     isLiveBackend,
@@ -302,7 +304,10 @@ export default function TerminalSettingsScreen() {
             <View
               style={[
                 styles.statusPill,
-                { backgroundColor: storeOpen ? Colors.successMuted : Colors.errorMuted },
+                {
+                  backgroundColor: storeOpen ? Colors.successMuted : Colors.errorMuted,
+                  borderColor: storeOpen ? Colors.successBorder : Colors.errorBorder,
+                },
               ]}
             >
               <Text
@@ -1001,7 +1006,15 @@ export default function TerminalSettingsScreen() {
         </SectionCard>
       </ScrollView>
 
-      <View style={styles.saveBar}>
+      <View
+        style={[
+          styles.saveBar,
+          {
+            bottom:
+              insets.bottom + Layout.bottomNavHeight + Layout.navDockOffset + 12,
+          },
+        ]}
+      >
         <ActionButton
           label="💾  SAVE TERMINAL SETTINGS"
           variant="primary"
@@ -1133,21 +1146,22 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   diagLine: {
+    fontFamily: Fonts.interRegular,
     fontSize: 12,
     lineHeight: 17,
     color: Colors.textSecondary,
   },
   diagError: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 12,
     lineHeight: 17,
     color: Colors.error,
-    fontWeight: '700',
   },
   routeBadge: {
+    fontFamily: Fonts.interBold,
     fontSize: 9,
-    fontWeight: '900',
     letterSpacing: 0.6,
-    color: Colors.primary,
+    color: Colors.primaryText,
   },
   chipRow: {
     gap: 8,
@@ -1162,28 +1176,29 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: Radius.full,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-    backgroundColor: Colors.surfaceHighlight,
+    borderColor: Colors.glassBorder,
+    backgroundColor: Colors.surface,
   },
   chipActive: {
     borderColor: Colors.primaryBorder,
     backgroundColor: Colors.primaryMuted,
   },
   chipLabel: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 11,
-    fontWeight: '800',
     color: Colors.textSecondary,
   },
   chipLabelActive: {
-    color: Colors.primary,
+    color: Colors.primaryText,
   },
   chipCount: {
+    fontFamily: Fonts.interBold,
     fontSize: 10,
-    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
     color: Colors.textMuted,
   },
   chipCountActive: {
-    color: Colors.primary,
+    color: Colors.primaryText,
   },
   categoryHeader: {
     flexDirection: 'row',
@@ -1193,6 +1208,7 @@ const styles = StyleSheet.create({
   },
   categoryHint: {
     flex: 1,
+    fontFamily: Fonts.interRegular,
     fontSize: 11,
     lineHeight: 15,
     color: Colors.textMuted,
@@ -1202,17 +1218,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   categoryAction: {
+    fontFamily: Fonts.interBold,
     fontSize: 9,
-    fontWeight: '900',
     letterSpacing: 0.5,
-    color: Colors.primary,
+    color: Colors.primaryText,
   },
   categoryActionMuted: {
     color: Colors.textMuted,
   },
   eventBlock: {
     borderTopWidth: 1,
-    borderTopColor: Colors.surfaceBorder,
+    borderTopColor: Colors.surfaceBorderSubtle,
     paddingTop: 10,
     gap: 8,
   },
@@ -1221,6 +1237,7 @@ const styles = StyleSheet.create({
     paddingLeft: 2,
   },
   routeEmpty: {
+    fontFamily: Fonts.interRegular,
     fontSize: 11,
     fontStyle: 'italic',
     color: Colors.textMuted,
@@ -1238,7 +1255,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: Spacing.md,
-    paddingBottom: Spacing.lg,
+    paddingBottom: Layout.bottomClearance + 76,
     gap: 12,
   },
   profileRow: {
@@ -1250,67 +1267,69 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 23,
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.primaryMuted,
+    borderWidth: 2,
+    borderColor: Colors.primaryBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarText: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 16,
-    fontWeight: '900',
-    color: Colors.white,
+    color: Colors.primaryText,
   },
   profileText: {
     flex: 1,
     gap: 1,
   },
   userName: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 15,
-    fontWeight: '800',
     color: Colors.textPrimary,
   },
   userRole: {
+    fontFamily: Fonts.interBold,
     fontSize: 12,
-    fontWeight: '700',
-    color: Colors.primary,
+    color: Colors.primaryText,
   },
   userEmail: {
+    ...Typography.mono,
     fontSize: 11,
     color: Colors.textSecondary,
   },
   statusPill: {
     borderRadius: Radius.full,
+    borderWidth: 1,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
   statusPillText: {
+    fontFamily: Fonts.interBold,
     fontSize: 9,
-    fontWeight: '900',
     letterSpacing: 0.3,
   },
   bodyText: {
+    fontFamily: Fonts.interRegular,
     fontSize: 12,
     lineHeight: 16,
     color: Colors.textSecondary,
   },
   masterBox: {
-    backgroundColor: Colors.surfaceHighlight,
+    backgroundColor: Colors.surfaceElevated,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     paddingHorizontal: 12,
   },
   divider: {
     height: 1,
-    backgroundColor: Colors.surfaceBorder,
+    backgroundColor: Colors.surfaceBorderSubtle,
   },
   subLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.7,
-    textTransform: 'uppercase',
-    color: Colors.textMuted,
+    ...Typography.sectionLabel,
   },
   hintText: {
+    fontFamily: Fonts.interRegular,
     fontSize: 10,
     color: Colors.textSecondary,
   },
@@ -1321,35 +1340,41 @@ const styles = StyleSheet.create({
   slotChip: {
     flex: 1,
     minHeight: 48,
-    borderRadius: Radius.sm,
+    borderRadius: Radius.md,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   slotChipIdle: {
     backgroundColor: Colors.surfaceElevated,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
   },
   slotChipSelected: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
+    shadowColor: Colors.primary,
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 4,
   },
   slotText: {
+    fontFamily: Fonts.jakartaSemiBold,
     fontSize: 11,
-    fontWeight: '800',
     color: Colors.textSecondary,
   },
   slotTextSelected: {
+    fontFamily: Fonts.jakartaBold,
     color: Colors.white,
   },
   rowTitle: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 13,
-    fontWeight: '700',
     color: Colors.textPrimary,
   },
   rowSubtitle: {
+    fontFamily: Fonts.interMedium,
     fontSize: 11,
-    fontWeight: '600',
     color: Colors.textSecondary,
   },
   alertToneRow: {
@@ -1365,10 +1390,10 @@ const styles = StyleSheet.create({
   segmentTrack: {
     flexDirection: 'row',
     gap: 4,
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.sm,
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     padding: 4,
   },
   segment: {
@@ -1383,8 +1408,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
   },
   segmentText: {
+    fontFamily: Fonts.interBold,
     fontSize: 10,
-    fontWeight: '900',
     color: Colors.textMuted,
   },
   segmentTextSelected: {
@@ -1421,22 +1446,22 @@ const styles = StyleSheet.create({
   encryptionChip: {
     flex: 1,
     minHeight: 48,
-    borderRadius: Radius.sm,
+    borderRadius: Radius.md,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   encryptionChipIdle: {
     backgroundColor: Colors.surfaceElevated,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
   },
   encryptionChipSelected: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
   },
   encryptionText: {
+    fontFamily: Fonts.interBold,
     fontSize: 9,
-    fontWeight: '800',
     color: Colors.textSecondary,
   },
   encryptionTextSelected: {
@@ -1447,18 +1472,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
-    backgroundColor: Colors.surfaceHighlight,
-    borderRadius: Radius.sm,
+    backgroundColor: Colors.glassFill,
+    borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     paddingLeft: 10,
     paddingRight: 4,
     minHeight: 44,
   },
   recipientText: {
     flex: 1,
+    fontFamily: Fonts.interMedium,
     fontSize: 11,
-    fontWeight: '600',
     color: Colors.textPrimary,
   },
   removeTouch: {
@@ -1468,8 +1493,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   removeText: {
+    fontFamily: Fonts.interBold,
     fontSize: 12,
-    fontWeight: '800',
     color: Colors.textMuted,
   },
   addRow: {
@@ -1487,38 +1512,37 @@ const styles = StyleSheet.create({
   branchChip: {
     flex: 1,
     minHeight: 48,
-    borderRadius: Radius.sm,
+    borderRadius: Radius.md,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   branchChipIdle: {
     backgroundColor: Colors.surfaceElevated,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
   },
   branchChipSelected: {
     backgroundColor: Colors.primaryMuted,
-    borderColor: Colors.primary,
+    borderColor: Colors.primaryBorder,
   },
   branchText: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 11,
-    fontWeight: '800',
     color: Colors.textMuted,
   },
   branchTextSelected: {
-    color: Colors.primary,
+    color: Colors.primaryText,
   },
   version: {
+    ...Typography.mono,
     fontSize: 10,
-    fontFamily: 'monospace',
     color: Colors.textMuted,
     textAlign: 'center',
     marginTop: 4,
   },
   saveBar: {
-    borderTopWidth: 1,
-    borderTopColor: Colors.surfaceBorder,
-    backgroundColor: Colors.surface,
-    padding: Spacing.md,
+    position: 'absolute',
+    left: Spacing.md,
+    right: Spacing.md,
   },
 });

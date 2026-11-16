@@ -2,6 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Colors, Radius } from '../theme/colors';
+import { Fonts, Typography } from '../theme/typography';
 import { normalizeCategoryName } from '../services/categories';
 import { parsePrice } from '../lib/format';
 import { newMenuItemId } from '../lib/ids';
@@ -405,6 +406,7 @@ export function MenuItemEditorModal({
 
 const styles = StyleSheet.create({
   permissionHint: {
+    fontFamily: Fonts.interRegular,
     fontSize: 11,
     lineHeight: 16,
     color: Colors.textSecondary,
@@ -413,15 +415,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   fieldLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
+    ...Typography.sectionLabel,
     color: Colors.textSecondary,
-  },
-  categoryRow: {
-    flexDirection: 'row',
-    gap: 4,
   },
   suggestionRow: {
     flexDirection: 'row',
@@ -430,48 +425,39 @@ const styles = StyleSheet.create({
   },
   suggestionChip: {
     minHeight: 36,
-    borderRadius: Radius.sm,
+    borderRadius: Radius.full,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
   },
   createHint: {
+    fontFamily: Fonts.interSemiBold,
     fontSize: 11,
     lineHeight: 16,
-    color: Colors.primary,
-    fontWeight: '700',
-  },
-  categoryChip: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: Radius.sm,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 2,
+    color: Colors.primaryText,
   },
   categoryChipIdle: {
     backgroundColor: Colors.surfaceElevated,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
   },
   categoryChipSelected: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
   },
   categoryText: {
+    fontFamily: Fonts.interBold,
     fontSize: 10,
-    fontWeight: '800',
     color: Colors.textSecondary,
   },
   categoryTextSelected: {
     color: Colors.white,
   },
   photoCard: {
-    backgroundColor: Colors.surfaceElevated,
+    backgroundColor: Colors.surface,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     padding: 12,
     gap: 8,
   },
@@ -481,8 +467,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   removePhoto: {
+    fontFamily: Fonts.interBold,
     fontSize: 11,
-    fontWeight: '800',
     color: Colors.error,
   },
   removePhotoHit: {
@@ -499,8 +485,8 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-    backgroundColor: Colors.surfaceHighlight,
+    borderColor: Colors.glassBorder,
+    backgroundColor: Colors.glassFill,
   },
   previewImage: {
     width: '100%',
@@ -511,13 +497,15 @@ const styles = StyleSheet.create({
     top: 8,
     left: 8,
     backgroundColor: Colors.successMuted,
-    borderRadius: Radius.sm,
-    paddingHorizontal: 6,
+    borderWidth: 1,
+    borderColor: Colors.successBorder,
+    borderRadius: Radius.full,
+    paddingHorizontal: 8,
     paddingVertical: 2,
   },
   attachedText: {
+    fontFamily: Fonts.interBold,
     fontSize: 9,
-    fontWeight: '900',
     letterSpacing: 0.4,
     color: Colors.success,
   },
@@ -525,32 +513,35 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: 'rgba(18, 18, 18, 0.82)',
-    borderRadius: Radius.sm,
-    paddingHorizontal: 7,
+    backgroundColor: 'rgba(15, 17, 23, 0.72)',
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
+    borderRadius: Radius.full,
+    paddingHorizontal: 8,
     paddingVertical: 3,
   },
   ratioText: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 10,
-    fontWeight: '900',
     letterSpacing: 0.4,
     color: Colors.textPrimary,
   },
   uploadZone: {
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.glassFill,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorderStrong,
     borderRadius: Radius.md,
     padding: 12,
     gap: 6,
   },
   uploadTitle: {
+    fontFamily: Fonts.jakartaBold,
     fontSize: 12,
-    fontWeight: '800',
     color: Colors.textPrimary,
   },
   uploadSubtitle: {
+    fontFamily: Fonts.interRegular,
     fontSize: 11,
     lineHeight: 15,
     color: Colors.textMuted,
@@ -566,13 +557,13 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceElevated,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    borderColor: Colors.glassBorder,
     paddingHorizontal: 12,
     paddingVertical: 4,
   },
   divider: {
     height: 1,
-    backgroundColor: Colors.surfaceBorder,
+    backgroundColor: Colors.surfaceBorderSubtle,
   },
   footerButton: {
     flex: 1,

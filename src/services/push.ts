@@ -35,7 +35,7 @@ export async function ensurePickupNotificationChannel(): Promise<void> {
     vibrationPattern: [0, 700, 400, 700, 400, 1200],
     bypassDnd: true,
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-    lightColor: '#F97316',
+    lightColor: '#6366F1',
   });
 }
 
