@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActionButton } from '../../components/ActionButton';
 import { HorizontalFilterChips } from '../../components/HorizontalFilterChips';
 import { ReservationCard } from '../../components/ReservationCard';
+import { ReservationDetailsModal } from '../../components/ReservationDetailsModal';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { TableCard } from '../../components/TableCard';
 import { TableEditorModal } from '../../components/TableEditorModal';
@@ -23,6 +24,7 @@ import {
   filterReservations,
   reservationFilterOptions,
   ReservationFilter,
+  resolveReservationTables,
 } from '../../lib/domain';
 import { useApp } from '../../state/AppProvider';
 import { canCreateTables, canDeleteTables } from '../../services/branchScope';
@@ -56,6 +58,10 @@ export default function DiningTablesScreen() {
 
   const bookingsLive = state.storeConfig.acceptingReservations;
   const isReservationsView = viewMode === 'reservations';
+  const resolvedReservations = useMemo(
+    () => resolveReservationTables(state.reservations, state.tables),
+    [state.reservations, state.tables]
+  );
   const arrivedCount = state.reservations.filter(
     (reservation) => reservation.status === 'arrived'
   ).length;
@@ -200,7 +206,7 @@ export default function DiningTablesScreen() {
         <Animated.View style={[styles.viewArea, animatedStyle]}>
           {isReservationsView ? (
             <GuestReservationsPanel
-              reservations={state.reservations}
+              reservations={resolvedReservations}
               refreshing={refreshing}
               onRefresh={onRefresh}
               onToggleArrival={(reservationId, status) =>
@@ -275,6 +281,7 @@ function GuestReservationsPanel({
   onToggleArrival: (reservationId: string, status: ReservationStatus) => void;
 }) {
   const [selectedFilter, setSelectedFilter] = useState<ReservationFilter>('all');
+  const [detailsId, setDetailsId] = useState<string | null>(null);
   const filterOptions = useMemo(
     () => reservationFilterOptions(reservations),
     [reservations]
@@ -283,6 +290,8 @@ function GuestReservationsPanel({
     () => filterReservations(reservations, selectedFilter),
     [reservations, selectedFilter]
   );
+  const detailsReservation =
+    reservations.find((reservation) => reservation.id === detailsId) ?? null;
 
   return (
     <>
@@ -296,7 +305,11 @@ function GuestReservationsPanel({
         data={filteredReservations}
         keyExtractor={(reservation) => reservation.id}
         renderItem={({ item }) => (
-          <ReservationCard reservation={item} onToggleArrival={onToggleArrival} />
+          <ReservationCard
+            reservation={item}
+            onOpenDetails={(reservation) => setDetailsId(reservation.id)}
+            onToggleArrival={onToggleArrival}
+          />
         )}
         style={styles.panelScroll}
         contentContainerStyle={styles.reservationList}
@@ -321,6 +334,12 @@ function GuestReservationsPanel({
             </Text>
           </View>
         }
+      />
+
+      <ReservationDetailsModal
+        reservation={detailsReservation}
+        onClose={() => setDetailsId(null)}
+        onSetStatus={onToggleArrival}
       />
     </>
   );

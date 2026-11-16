@@ -13,6 +13,7 @@ import {
   TerminalSettings,
 } from '../types';
 import { createDefaultStoreConfig, createDefaultTerminalSettings } from '../lib/seed';
+import { formatReservationSlot } from '../lib/format';
 import {
   normalizeStaffRoster,
   normalizeTerminalSettings,
@@ -107,6 +108,7 @@ export function mapOrderRecord(record: RecordModel): Order {
     branchId: asString(record.branch_id),
     customerName: asString(record.customer_name, 'Guest'),
     customerPhone: asString(record.customer_phone),
+    customerEmail: asString(record.customer_email) || undefined,
     status: normalizeOrderStatus(record.status),
     items: parseOrderItems(record.items),
     totalAmount: asNumber(record.total_amount),
@@ -158,15 +160,18 @@ export function mapTableRecord(record: RecordModel): DiningTable {
 }
 
 export function mapReservationRecord(record: RecordModel): Reservation {
+  const rawTime = asString(record.reservation_time);
+  const duration = asNumber(record.duration_minutes, 0);
   return {
     id: record.id,
     branchId: asString(record.branch_id),
     customerName: asString(record.customer_name, 'Guest'),
     customerPhone: asString(record.customer_phone),
     guestCount: asNumber(record.guest_count, 1),
-    reservationTime: asString(record.reservation_time),
-    reservationAt: asString(record.reservation_time) || undefined,
+    reservationTime: formatReservationSlot(rawTime),
+    reservationAt: rawTime || undefined,
     tableNumber: asString(record.table_number) || undefined,
+    durationMinutes: duration > 0 ? duration : undefined,
     status: normalizeReservationStatus(record.status),
     specialRequests: asString(record.special_requests) || undefined,
   };
@@ -180,6 +185,10 @@ export function mapBranchRecord(record: RecordModel): Branch {
     address: asString(record.address),
     phone: asString(record.phone),
     isActive: asBoolean(record.is_active, true),
+    openingHours: asString(record.opening_hours) || undefined,
+    facebookUrl: asString(record.facebook_url) || undefined,
+    menuDownloadUrl: asString(record.menu_download_url) || undefined,
+    mapsEmbed: asString(record.maps_embed) || undefined,
   };
 }
 
@@ -280,6 +289,7 @@ export function toOrderRecord(order: Order): Record<string, unknown> {
     branch_id: order.branchId,
     customer_name: order.customerName,
     customer_phone: order.customerPhone,
+    customer_email: order.customerEmail ?? '',
     status: order.status,
     items: order.items,
     total_amount: order.totalAmount,

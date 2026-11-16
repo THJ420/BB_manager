@@ -1,6 +1,6 @@
 {
   "name": "bb-manager",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "private": true,
   "description": "Multi-branch restaurant pickup, menu, floor and terminal operations app built with Expo + React Native",
   "main": "expo-router/entry",
@@ -31,7 +31,9 @@
     "expo-intent-launcher": "~58.0.3",
     "expo-linking": "~58.0.15",
     "expo-notifications": "~58.1.8",
+    "expo-print": "~58.0.8",
     "expo-router": "~58.0.29",
+    "expo-sharing": "~58.0.21",
     "expo-sqlite": "~58.0.15",
     "expo-status-bar": "~58.0.4",
     "expo-updates": "~58.0.21",

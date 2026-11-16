@@ -1,15 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { ActionButton } from './ActionButton';
 import { ModalShell } from './ModalShell';
 import { TextField } from './TextField';
 import {
-  BRANCH_SELECT_OPTIONS,
-  BranchSelect,
   CreateBranchInput,
   normalizeBranchCode,
+  storeNameSuggestion,
 } from '../services/branches';
-import { Colors, Radius, Spacing } from '../theme/colors';
+import { Colors, Spacing } from '../theme/colors';
 
 export interface AddStoreModalProps {
   visible: boolean;
@@ -22,10 +21,18 @@ const EMPTY: CreateBranchInput = {
   name: '',
   code: '',
   address: '',
-  select: 'enjoydonerkebab',
+  phone: '',
+  openingHours: '',
+  facebookUrl: '',
+  menuDownloadUrl: '',
+  mapsEmbed: '',
 };
 
-/** Provisions a new branch in PocketBase; the sync hook mirrors it to the web. */
+/**
+ * Provisions a new Enjoy Doner Kebab branch in PocketBase; the sync hook
+ * mirrors it to the WordPress storefront. EDK is the only multi-branch brand,
+ * so there is no brand picker — Radhuni and Crispy Chicken are single-unit.
+ */
 export function AddStoreModal({
   visible,
   existingCodes,
@@ -33,12 +40,14 @@ export function AddStoreModal({
   onSubmit,
 }: AddStoreModalProps) {
   const [values, setValues] = useState<CreateBranchInput>(EMPTY);
+  const [nameTouched, setNameTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!visible) return;
     setValues(EMPTY);
+    setNameTouched(false);
     setError(null);
     setBusy(false);
   }, [visible]);
@@ -49,6 +58,18 @@ export function AddStoreModal({
   };
 
   const code = normalizeBranchCode(values.code);
+
+  // Until the owner edits the name directly, it tracks the branch code with
+  // the brand suffix: EDK-MOSINA -> "Mosina Enjoy Doner Kebab".
+  const handleCodeChange = (value: string) => {
+    const suggestion = storeNameSuggestion(value);
+    setValues((current) => ({
+      ...current,
+      code: value,
+      name: nameTouched ? current.name : suggestion,
+    }));
+    setError(null);
+  };
 
   const submit = async () => {
     setBusy(true);
@@ -83,17 +104,9 @@ export function AddStoreModal({
       }
     >
       <TextField
-        label="Store Name"
-        value={values.name}
-        onChangeText={(value) => patch({ name: value })}
-        placeholder="e.g. Enjoy Doner Kebab Mosina"
-        testID="input_store_name"
-      />
-
-      <TextField
         label="Branch Code"
         value={values.code}
-        onChangeText={(value) => patch({ code: value })}
+        onChangeText={handleCodeChange}
         placeholder="e.g. EDK-MOSINA"
         autoCapitalize="characters"
         maxLength={40}
@@ -102,33 +115,74 @@ export function AddStoreModal({
       {code ? <Text style={styles.preview}>Registers as: {code}</Text> : null}
 
       <TextField
-        label="Address (optional)"
+        label="Store Name"
+        value={values.name}
+        onChangeText={(value) => {
+          setNameTouched(true);
+          patch({ name: value });
+        }}
+        placeholder="e.g. Mosina Enjoy Doner Kebab"
+        testID="input_store_name"
+      />
+
+      <TextField
+        label="Address"
         value={values.address}
         onChangeText={(value) => patch({ address: value })}
         placeholder="e.g. Poznańska 3, 62-050 Mosina"
         testID="input_store_address"
       />
 
-      <Text style={styles.label}>BRAND</Text>
-      <View style={styles.brandRow}>
-        {BRANCH_SELECT_OPTIONS.map((option) => {
-          const selected = values.select === option.id;
-          return (
-            <Pressable
-              key={option.id}
-              onPress={() => patch({ select: option.id as BranchSelect })}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              testID={`store_brand_${option.id.replace(/\s+/g, '_')}`}
-              style={[styles.brandChip, selected ? styles.brandChipOn : styles.brandChipOff]}
-            >
-              <Text style={[styles.brandText, selected && styles.brandTextOn]}>
-                {option.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <TextField
+        label="Phone Number"
+        value={values.phone}
+        onChangeText={(value) => patch({ phone: value })}
+        placeholder="e.g. +48 61 123 45 67"
+        keyboardType="phone-pad"
+        testID="input_store_phone"
+      />
+
+      <TextField
+        label="Opening Hours"
+        value={values.openingHours}
+        onChangeText={(value) => patch({ openingHours: value })}
+        placeholder="e.g. Mon–Sun 11:00–22:00"
+        testID="input_store_hours"
+      />
+
+      <TextField
+        label="Facebook Page Link"
+        value={values.facebookUrl}
+        onChangeText={(value) => patch({ facebookUrl: value })}
+        placeholder="https://facebook.com/yourstore"
+        autoCapitalize="none"
+        keyboardType="url"
+        testID="input_store_facebook"
+      />
+
+      <TextField
+        label="Download Menu Link"
+        value={values.menuDownloadUrl}
+        onChangeText={(value) => patch({ menuDownloadUrl: value })}
+        placeholder="https://yourstore.pl/menu.pdf"
+        autoCapitalize="none"
+        keyboardType="url"
+        testID="input_store_menu"
+      />
+
+      <TextField
+        label="Google Maps Embed Code"
+        value={values.mapsEmbed}
+        onChangeText={(value) => patch({ mapsEmbed: value })}
+        placeholder='Paste the <iframe …> from Google Maps → Share → Embed a map'
+        autoCapitalize="none"
+        multiline
+        numberOfLines={4}
+        testID="input_store_maps"
+      />
+      <Text style={styles.hint}>
+        The embed code powers the live map preview on the store page.
+      </Text>
 
       <Text style={styles.note}>
         The storefront sync picks the new branch up automatically and links it back to this
@@ -145,44 +199,16 @@ export function AddStoreModal({
 }
 
 const styles = StyleSheet.create({
-  label: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-    color: Colors.textMuted,
-  },
-  brandRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-  },
-  brandChip: {
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  brandChipOn: {
-    backgroundColor: Colors.primaryMuted,
-    borderColor: Colors.primaryBorder,
-  },
-  brandChipOff: {
-    backgroundColor: Colors.surfaceHighlight,
-    borderColor: Colors.surfaceBorder,
-  },
-  brandText: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-    color: Colors.textMuted,
-  },
-  brandTextOn: {
-    color: Colors.primary,
-  },
   preview: {
     fontSize: 11,
     fontWeight: '700',
     color: Colors.primary,
+  },
+  hint: {
+    fontSize: 10,
+    lineHeight: 14,
+    color: Colors.textMuted,
+    marginTop: -Spacing.xs,
   },
   note: {
     fontSize: 11,

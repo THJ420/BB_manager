@@ -29,6 +29,25 @@ export interface UpdateCheck {
   error: string | null;
 }
 
+/** Download progress as a 0..1 fraction (0 when the total size is unknown). */
+export type UpdateProgressHandler = (fraction: number) => void;
+
+/**
+ * Release bodies carry raw GitHub links ("Full Changelog: …/compare/…").
+ * The terminal UI must never expose repository URLs, so strip them and the
+ * changelog footer before display.
+ */
+export function sanitizeReleaseNotes(notes: string): string {
+  return notes
+    .replace(/https?:\/\/\S+/gi, '')
+    .split('\n')
+    .filter((line) => !/full changelog/i.test(line))
+    .map((line) => line.replace(/\s+$/g, ''))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 const DEFAULT_REPO = 'THJ420/BB_manager';
 const APK_ASSET_NAME = 'bb-manager-preview.apk';
 
@@ -96,7 +115,10 @@ export async function checkForUpdate(): Promise<UpdateCheck> {
   }
 }
 
-export async function downloadAndInstallUpdate(release: ReleaseInfo): Promise<void> {
+export async function downloadAndInstallUpdate(
+  release: ReleaseInfo,
+  onProgress?: UpdateProgressHandler
+): Promise<void> {
   if (Platform.OS !== 'android' || !release.apkUrl) {
     if (release.htmlUrl) {
       await Linking.openURL(release.htmlUrl);
@@ -107,11 +129,23 @@ export async function downloadAndInstallUpdate(release: ReleaseInfo): Promise<vo
 
   const target = `${FileSystem.cacheDirectory ?? ''}bb-manager-${release.version}.apk`;
   const existing = await FileSystem.getInfoAsync(target);
-  if (!existing.exists) {
-    const result = await FileSystem.downloadAsync(release.apkUrl, target);
-    if (result.status !== 200) {
+  if (existing.exists) {
+    onProgress?.(1);
+  } else {
+    const resumable = FileSystem.createDownloadResumable(
+      release.apkUrl,
+      target,
+      {},
+      (progress) => {
+        const total = progress.totalBytesExpectedToWrite;
+        onProgress?.(total > 0 ? progress.totalBytesWritten / total : 0);
+      }
+    );
+    const result = await resumable.downloadAsync();
+    if (!result || result.status !== 200) {
       throw new Error('The update could not be downloaded.');
     }
+    onProgress?.(1);
   }
 
   const contentUri = await FileSystem.getContentUriAsync(target);

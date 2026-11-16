@@ -5,11 +5,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActionButton } from '../../components/ActionButton';
 import { HorizontalFilterChips } from '../../components/HorizontalFilterChips';
 import { ReservationCard } from '../../components/ReservationCard';
+import { ReservationDetailsModal } from '../../components/ReservationDetailsModal';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import {
   filterReservations,
   reservationFilterOptions,
   ReservationFilter,
+  resolveReservationTables,
 } from '../../lib/domain';
 import { branchDisplayName } from '../../lib/branchLabel';
 import { useApp } from '../../state/AppProvider';
@@ -19,15 +21,22 @@ export default function ReservationsScreen() {
   const router = useRouter();
   const { state, updateReservationStatus, isOwner, isOwnerWorkspace } = useApp();
   const [selectedFilter, setSelectedFilter] = useState<ReservationFilter>('all');
+  const [detailsId, setDetailsId] = useState<string | null>(null);
 
+  const resolvedReservations = useMemo(
+    () => resolveReservationTables(state.reservations, state.tables),
+    [state.reservations, state.tables]
+  );
   const filterOptions = useMemo(
-    () => reservationFilterOptions(state.reservations),
-    [state.reservations]
+    () => reservationFilterOptions(resolvedReservations),
+    [resolvedReservations]
   );
   const filteredReservations = useMemo(
-    () => filterReservations(state.reservations, selectedFilter),
-    [state.reservations, selectedFilter]
+    () => filterReservations(resolvedReservations, selectedFilter),
+    [resolvedReservations, selectedFilter]
   );
+  const detailsReservation =
+    resolvedReservations.find((reservation) => reservation.id === detailsId) ?? null;
   const arrivedCount = state.reservations.filter(
     (reservation) => reservation.status === 'arrived'
   ).length;
@@ -82,6 +91,7 @@ export default function ReservationsScreen() {
             reservation={item}
             readOnly={networkMode}
             branchLabel={networkMode ? branchLabels.get(item.branchId) : undefined}
+            onOpenDetails={(reservation) => setDetailsId(reservation.id)}
             onToggleArrival={(reservationId, status) =>
               void updateReservationStatus(reservationId, status)
             }
@@ -97,6 +107,18 @@ export default function ReservationsScreen() {
               Website reservations routed to this branch will appear here.
             </Text>
           </View>
+        }
+      />
+
+      <ReservationDetailsModal
+        reservation={detailsReservation}
+        readOnly={networkMode}
+        branchLabel={
+          detailsReservation ? branchLabels.get(detailsReservation.branchId) : undefined
+        }
+        onClose={() => setDetailsId(null)}
+        onSetStatus={(reservationId, status) =>
+          void updateReservationStatus(reservationId, status)
         }
       />
     </SafeAreaView>

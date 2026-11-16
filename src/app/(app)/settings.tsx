@@ -820,12 +820,19 @@ export default function TerminalSettingsScreen() {
             label="Address line 1"
             value={draft.contact.addressLine1}
             onChangeText={(addressLine1) => updateContact({ addressLine1 })}
+            editable={isOwner}
           />
           <TextField
             label="Address line 2"
             value={draft.contact.addressLine2}
             onChangeText={(addressLine2) => updateContact({ addressLine2 })}
+            editable={isOwner}
           />
+          {!isOwner ? (
+            <Text style={styles.bodyText}>
+              The store address and social links are managed by the owner.
+            </Text>
+          ) : null}
 
           <View style={styles.divider} />
 
@@ -853,6 +860,7 @@ export default function TerminalSettingsScreen() {
             onChangeText={(facebookHandle) => updateSocial({ facebookHandle })}
             placeholder="@restaurant"
             autoCapitalize="none"
+            editable={isOwner}
           />
           <TextField
             label="Facebook URL"
@@ -860,6 +868,7 @@ export default function TerminalSettingsScreen() {
             onChangeText={(facebookUrl) => updateSocial({ facebookUrl })}
             autoCapitalize="none"
             keyboardType="url"
+            editable={isOwner}
           />
           <TextField
             label="Instagram handle"
@@ -867,6 +876,7 @@ export default function TerminalSettingsScreen() {
             onChangeText={(instagramHandle) => updateSocial({ instagramHandle })}
             placeholder="@restaurant"
             autoCapitalize="none"
+            editable={isOwner}
           />
           <TextField
             label="Instagram URL"
@@ -874,6 +884,7 @@ export default function TerminalSettingsScreen() {
             onChangeText={(instagramUrl) => updateSocial({ instagramUrl })}
             autoCapitalize="none"
             keyboardType="url"
+            editable={isOwner}
           />
         </SectionCard>
 
@@ -948,6 +959,7 @@ export default function TerminalSettingsScreen() {
             onChangeText={(branchName) =>
               setDraft((current) => ({ ...current, branchName }))
             }
+            editable={isOwner}
           />
 
           <Text style={styles.subLabel}>BRANCH CODE</Text>

@@ -273,6 +273,44 @@ export function arrivalTarget(status: ReservationStatus): ReservationStatus | nu
   return null;
 }
 
+/**
+ * Validates website-requested tables against the branch floor plan. The
+ * Laravel syncers historically sent "T{laravel_id}", which can name a table
+ * that does not exist in PocketBase (e.g. T5 on a T1/T7 floor). A request that
+ * matches no configured table becomes "Unassigned" and keeps the raw value in
+ * `requestedTableNumber` for the details sheet. Branches with no loaded floor
+ * plan (owner network view) pass through untouched — there is nothing to
+ * validate against.
+ */
+export function resolveReservationTables(
+  reservations: Reservation[],
+  tables: DiningTable[]
+): Reservation[] {
+  const byBranch = new Map<string, DiningTable[]>();
+  for (const table of tables) {
+    const list = byBranch.get(table.branchId) ?? [];
+    list.push(table);
+    byBranch.set(table.branchId, list);
+  }
+
+  return reservations.map((reservation) => {
+    const requested = (reservation.tableNumber ?? '').trim();
+    if (!requested) return reservation;
+    const branchTables = byBranch.get(reservation.branchId);
+    if (!branchTables || branchTables.length === 0) return reservation;
+
+    const match = branchTables.find(
+      (table) => table.tableNumber.trim().toLowerCase() === requested.toLowerCase()
+    );
+    if (match) {
+      return match.tableNumber === reservation.tableNumber
+        ? reservation
+        : { ...reservation, tableNumber: match.tableNumber };
+    }
+    return { ...reservation, tableNumber: undefined, requestedTableNumber: requested };
+  });
+}
+
 export function filterLedger(
   orders: Order[],
   filter: OrderFilter,
@@ -281,11 +319,14 @@ export function filterLedger(
   const needle = query.trim().replace(/^#/, '').toLowerCase();
   return orders.filter((order) => {
     const matchesFilter = filter === 'all' || order.status === filter;
+    // Amounts match by prefix ("45" finds 45.00/45.55 but not 145.00).
+    const amountText = order.totalAmount.toFixed(2);
     const matchesQuery =
       needle.length === 0 ||
       order.orderNumber.toLowerCase().includes(needle) ||
       order.customerName.toLowerCase().includes(needle) ||
-      order.pickupCode.includes(needle);
+      order.pickupCode.includes(needle) ||
+      amountText.startsWith(needle);
     return matchesFilter && matchesQuery;
   });
 }

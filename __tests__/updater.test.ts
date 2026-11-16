@@ -9,8 +9,15 @@ jest.mock('expo-constants', () => ({
     },
   },
 }));
-jest.mock('expo-file-system/legacy', () => ({}), { virtual: true });
-jest.mock('expo-intent-launcher', () => ({}), { virtual: true });
+jest.mock('expo-file-system/legacy', () => ({
+  cacheDirectory: 'file:///cache/',
+  getInfoAsync: jest.fn(),
+  createDownloadResumable: jest.fn(),
+  getContentUriAsync: jest.fn(),
+}));
+jest.mock('expo-intent-launcher', () => ({
+  startActivityAsync: jest.fn(),
+}));
 jest.mock(
   'react-native',
   () => ({
@@ -20,7 +27,9 @@ jest.mock(
   { virtual: true }
 );
 
-import { checkForUpdate } from '../src/services/updater';
+import { checkForUpdate, downloadAndInstallUpdate, sanitizeReleaseNotes } from '../src/services/updater';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as IntentLauncher from 'expo-intent-launcher';
 
 describe('isNewerVersion', () => {
   it('compares release tags against the installed version', () => {
@@ -134,5 +143,82 @@ describe('checkForUpdate', () => {
 
     expect(result.available).toBe(true);
     expect(result.release?.apkUrl).toBe('https://example.com/standalone.apk');
+  });
+});
+
+describe('sanitizeReleaseNotes', () => {
+  it('strips raw GitHub compare and repository URLs', () => {
+    const notes = [
+      '## What\'s Changed',
+      '* feat: store search by @THJ420 in https://github.com/THJ420/BB_manager/pull/12',
+      '',
+      '**Full Changelog**: https://github.com/THJ420/BB_manager/compare/v1.4.3...v1.4.4',
+    ].join('\n');
+
+    const cleaned = sanitizeReleaseNotes(notes);
+
+    expect(cleaned).not.toContain('github.com');
+    expect(cleaned).not.toContain('http');
+    expect(cleaned).not.toMatch(/full changelog/i);
+    expect(cleaned).toContain('feat: store search');
+  });
+
+  it('keeps ordinary prose and collapses leftover blank lines', () => {
+    expect(sanitizeReleaseNotes('Fix A\n\n\nFix B\n')).toBe('Fix A\n\nFix B');
+    expect(sanitizeReleaseNotes('')).toBe('');
+  });
+});
+
+describe('downloadAndInstallUpdate progress', () => {
+  const release = {
+    version: '1.4.5',
+    tag: 'v1.4.5',
+    notes: '',
+    apkUrl: 'https://example.com/bb-manager-preview.apk',
+    htmlUrl: 'https://example.com/release',
+    publishedAt: null,
+  };
+
+  beforeEach(() => {
+    jest.mocked(FileSystem.getInfoAsync).mockReset();
+    jest.mocked(FileSystem.createDownloadResumable).mockReset();
+    jest.mocked(FileSystem.getContentUriAsync).mockReset();
+    jest.mocked(IntentLauncher.startActivityAsync).mockReset();
+  });
+
+  it('reports download fractions and launches the installer intent', async () => {
+    jest.mocked(FileSystem.getInfoAsync).mockResolvedValue({ exists: false } as never);
+    jest.mocked(FileSystem.getContentUriAsync).mockResolvedValue('content://apk');
+    jest
+      .mocked(FileSystem.createDownloadResumable)
+      .mockImplementation((_url, _target, _options, callback) => {
+        callback?.({ totalBytesWritten: 50, totalBytesExpectedToWrite: 100 });
+        return {
+          downloadAsync: async () => {
+            callback?.({ totalBytesWritten: 100, totalBytesExpectedToWrite: 100 });
+            return { status: 200, uri: 'file:///cache/app.apk', headers: {}, md5: '' };
+          },
+        } as never;
+      });
+
+    const fractions: number[] = [];
+    await downloadAndInstallUpdate(release, (fraction) => fractions.push(fraction));
+
+    expect(fractions).toEqual([0.5, 1, 1]);
+    expect(IntentLauncher.startActivityAsync).toHaveBeenCalledWith(
+      'android.intent.action.VIEW',
+      expect.objectContaining({ type: 'application/vnd.android.package-archive' })
+    );
+  });
+
+  it('skips the download when the APK is already cached', async () => {
+    jest.mocked(FileSystem.getInfoAsync).mockResolvedValue({ exists: true } as never);
+    jest.mocked(FileSystem.getContentUriAsync).mockResolvedValue('content://apk');
+
+    const fractions: number[] = [];
+    await downloadAndInstallUpdate(release, (fraction) => fractions.push(fraction));
+
+    expect(FileSystem.createDownloadResumable).not.toHaveBeenCalled();
+    expect(fractions).toEqual([1]);
   });
 });

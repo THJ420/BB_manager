@@ -7,8 +7,11 @@ import { isPocketBaseConfigured, pb } from './pocketbase';
 /**
  * High-priority Android channel used by `pb_hooks/lib/terminal.js` when it
  * fans a new online pickup order out to the branch terminals.
+ *
+ * v2: Android freezes a channel's sound at creation time, so the id was bumped
+ * when the channel switched from the default chime to the bundled alarm.
  */
-export const PICKUP_CHANNEL_ID = 'pickup-orders';
+export const PICKUP_CHANNEL_ID = 'pickup-orders-v2';
 
 // Foreground pushes must still ring and show a banner; the OS would otherwise
 // swallow them while the terminal screen is open.
@@ -27,7 +30,7 @@ export async function ensurePickupNotificationChannel(): Promise<void> {
     name: 'Pickup orders',
     description: 'Incoming online pickup orders for this terminal.',
     importance: Notifications.AndroidImportance.MAX,
-    sound: 'default',
+    sound: 'loud_alarm.wav',
     enableVibrate: true,
     vibrationPattern: [0, 700, 400, 700, 400, 1200],
     bypassDnd: true,

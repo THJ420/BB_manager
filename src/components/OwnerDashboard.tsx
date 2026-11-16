@@ -151,7 +151,7 @@ export function OwnerDashboard() {
       { id: 'all', label: 'All Branches', count: rangeOrders.length },
       ...visibleBranches.map((branch) => ({
         id: branch.id,
-        label: branch.code || branch.name,
+        label: branch.code ? branch.code.toLowerCase() : branch.name,
         count: byBranch.get(branch.id) ?? 0,
       })),
     ];

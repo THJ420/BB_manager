@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Colors, Radius, Spacing } from '../theme/colors';
 import { arrivalTarget, reservationStatusBadge } from '../lib/domain';
 import { Reservation, ReservationStatus } from '../types';
@@ -8,6 +8,8 @@ import { ActionButton } from './ActionButton';
 export interface ReservationCardProps {
   reservation: Reservation;
   onToggleArrival: (reservationId: string, status: ReservationStatus) => void;
+  /** Opens the full booking details sheet (tap anywhere outside the button). */
+  onOpenDetails?: (reservation: Reservation) => void;
   /** Owner console: view-only booking across branches. */
   readOnly?: boolean;
   branchLabel?: string;
@@ -17,6 +19,7 @@ export interface ReservationCardProps {
 export function ReservationCard({
   reservation,
   onToggleArrival,
+  onOpenDetails,
   readOnly = false,
   branchLabel,
 }: ReservationCardProps) {
@@ -24,7 +27,12 @@ export function ReservationCard({
   const target = readOnly ? null : arrivalTarget(reservation.status);
 
   return (
-    <View style={styles.card} testID={`reservation_card_${reservation.id}`}>
+    <Pressable
+      style={styles.card}
+      onPress={onOpenDetails ? () => onOpenDetails(reservation) : undefined}
+      disabled={!onOpenDetails}
+      testID={`reservation_card_${reservation.id}`}
+    >
       <View style={styles.headerRow}>
         <Text style={styles.time}>⏰ {reservation.reservationTime}</Text>
         <View style={styles.headerPills}>
@@ -53,6 +61,12 @@ export function ReservationCard({
         </View>
       </View>
 
+      {reservation.requestedTableNumber ? (
+        <Text style={styles.requestedNote}>
+          Guest requested {reservation.requestedTableNumber} · not on the floor plan
+        </Text>
+      ) : null}
+
       {reservation.specialRequests ? (
         <View style={styles.noteBox}>
           <Text style={styles.noteText}>Note: {reservation.specialRequests}</Text>
@@ -78,7 +92,7 @@ export function ReservationCard({
       ) : (
         <Text style={styles.lockedNote}>View-only ledger entry · status managed by floor host</Text>
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -144,6 +158,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: Colors.textSecondary,
+  },
+  requestedNote: {
+    fontSize: 10,
+    fontStyle: 'italic',
+    color: Colors.textMuted,
   },
   noteBox: {
     backgroundColor: Colors.warningMuted,

@@ -42,7 +42,7 @@ module.exports = {
   expo: {
     name: 'BB Manager',
     slug: 'bb-manager',
-    version: '1.4.4',
+    version: '1.4.5',
     orientation: 'default',
     scheme: 'bbmanager',
     userInterfaceStyle: 'dark',
@@ -112,6 +112,9 @@ module.exports = {
         'expo-notifications',
         {
           color: '#F97316',
+          // Bundles the alarm into android res/raw so the pickup channel and
+          // remote pushes ring with the same loud tone as the in-app loop.
+          sounds: ['./assets/sounds/loud_alarm.wav'],
         },
       ],
       [

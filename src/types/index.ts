@@ -21,6 +21,7 @@ export interface Order {
   branchId: string;
   customerName: string;
   customerPhone: string;
+  customerEmail?: string;
   status: OrderStatus;
   items: OrderItem[];
   totalAmount: number;
@@ -83,6 +84,9 @@ export interface Reservation {
   /** Raw PocketBase timestamp, used for owner date-range aggregation. */
   reservationAt?: string;
   tableNumber?: string;
+  /** Website-requested table that is not on the branch floor plan. */
+  requestedTableNumber?: string;
+  durationMinutes?: number;
   status: ReservationStatus;
   specialRequests?: string;
 }
@@ -120,6 +124,10 @@ export interface Branch {
   address: string;
   phone: string;
   isActive: boolean;
+  openingHours?: string;
+  facebookUrl?: string;
+  menuDownloadUrl?: string;
+  mapsEmbed?: string;
 }
 
 export type StaffRole = 'owner' | 'manager' | 'kitchen_lead' | 'floor_staff';

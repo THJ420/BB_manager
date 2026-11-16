@@ -14,12 +14,14 @@ import { ActionButton } from '../../components/ActionButton';
 import { ConnectionBadge } from '../../components/ConnectionBadge';
 import { HorizontalFilterChips } from '../../components/HorizontalFilterChips';
 import { OrderCard } from '../../components/OrderCard';
+import { OrderReceiptModal } from '../../components/OrderReceiptModal';
 import { RejectOrderModal } from '../../components/RejectOrderModal';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { StatusBadge } from '../../components/StatusBadge';
+import { TextField } from '../../components/TextField';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useNow } from '../../hooks/useNow';
-import { filterOrders, orderFilterOptions, OrderFilter } from '../../lib/domain';
+import { filterLedger, orderFilterOptions, OrderFilter } from '../../lib/domain';
 import { branchDisplayName } from '../../lib/branchLabel';
 import { formatCurrency } from '../../lib/format';
 import { useApp } from '../../state/AppProvider';
@@ -42,7 +44,9 @@ export default function OrdersBoardScreen() {
   const { refreshing, onRefresh } = usePullToRefresh(refreshData);
 
   const [selectedFilter, setSelectedFilter] = useState<OrderFilter>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [receiptOrderId, setReceiptOrderId] = useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = useState<Order | null>(null);
   const [highlightedOrderId, setHighlightedOrderId] = useState<string | null>(null);
   const knownOrderIdsRef = useRef<Set<string>>(new Set());
@@ -72,8 +76,8 @@ export default function OrdersBoardScreen() {
 
   const filterOptions = useMemo(() => orderFilterOptions(state.orders), [state.orders]);
   const filteredOrders = useMemo(
-    () => filterOrders(state.orders, selectedFilter),
-    [state.orders, selectedFilter]
+    () => filterLedger(state.orders, selectedFilter, searchQuery),
+    [state.orders, selectedFilter, searchQuery]
   );
   const branchLabels = useMemo(() => {
     const byId = new Map<string, string>();
@@ -90,6 +94,11 @@ export default function OrdersBoardScreen() {
 
   const selectedOrder: Order | null =
     state.orders.find((order) => order.id === selectedOrderId) ?? state.orders[0] ?? null;
+  const receiptOrder: Order | null =
+    state.orders.find((order) => order.id === receiptOrderId) ?? null;
+  const receiptBranch = receiptOrder
+    ? state.branches.find((branch) => branch.id === receiptOrder.branchId) ?? null
+    : null;
 
   const handleAdvance = (orderId: string, status: Order['status']) => {
     void updateOrderStatus(orderId, status);
@@ -111,7 +120,10 @@ export default function OrdersBoardScreen() {
               ? undefined
               : (order) => setRejectTarget(order)
           }
-          onSelect={isTabletSplit ? (order) => setSelectedOrderId(order.id) : undefined}
+          onSelect={(order) => {
+            if (isTabletSplit) setSelectedOrderId(order.id);
+            setReceiptOrderId(order.id);
+          }}
           selected={isTabletSplit && orderIsSelected(item, selectedOrder)}
           highlighted={item.id === highlightedOrderId}
           readOnly={isOwner && !isOwnerWorkspace}
@@ -170,6 +182,15 @@ export default function OrdersBoardScreen() {
           />
         }
       />
+
+      <View style={styles.searchWrap}>
+        <TextField
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search by customer, #order / PIN, or amount…"
+          testID="orders_search_input"
+        />
+      </View>
 
       <HorizontalFilterChips
         options={filterOptions}
@@ -251,6 +272,12 @@ export default function OrdersBoardScreen() {
           if (target) void rejectOrder(target.id, reason);
         }}
       />
+
+      <OrderReceiptModal
+        order={receiptOrder}
+        branch={receiptBranch}
+        onClose={() => setReceiptOrderId(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -266,6 +293,10 @@ const styles = StyleSheet.create({
   },
   headerAction: {
     flex: 1,
+  },
+  searchWrap: {
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
   },
   listContent: {
     paddingHorizontal: Spacing.md,

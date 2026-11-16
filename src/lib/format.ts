@@ -65,6 +65,50 @@ export function initials(name: string): string {
   return `${words[0][0] ?? ''}${words[1][0] ?? ''}`.toUpperCase();
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/** PocketBase stores "YYYY-MM-DD HH:MM:SS.sssZ"; Hermes needs the ISO "T". */
+export function parseReservationTimestamp(raw: string): Date | null {
+  const text = raw.trim();
+  if (!text) return null;
+  const timestamp = Date.parse(text.includes('T') ? text : text.replace(' ', 'T'));
+  return Number.isNaN(timestamp) ? null : new Date(timestamp);
+}
+
+function clockLabel(date: Date): string {
+  const hours24 = date.getHours();
+  const hours = hours24 % 12 || 12;
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes} ${hours24 < 12 ? 'AM' : 'PM'}`;
+}
+
+/** "17 Nov · 12:00 PM" for the booking card; unparseable input passes through. */
+export function formatReservationSlot(raw: string): string {
+  const date = parseReservationTimestamp(raw);
+  if (!date) return raw;
+  return `${date.getDate()} ${MONTHS[date.getMonth()]} · ${clockLabel(date)}`;
+}
+
+/** "Monday, 17 Nov 2026" for the booking details sheet. */
+export function formatReservationDate(raw: string): string {
+  const date = parseReservationTimestamp(raw);
+  if (!date) return raw;
+  return `${WEEKDAYS[date.getDay()]}, ${date.getDate()} ${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+export function formatReservationTime(raw: string): string {
+  const date = parseReservationTimestamp(raw);
+  return date ? clockLabel(date) : raw;
+}
+
+export function formatDurationMinutes(minutes: number | undefined): string {
+  if (!minutes || minutes <= 0) return 'Not specified';
+  if (minutes < 60) return `${minutes} min`;
+  const hours = minutes / 60;
+  return Number.isInteger(hours) ? `${hours} h` : `${hours.toFixed(1)} h`;
+}
+
 export function titleCaseWords(input: string): string {
   return input
     .split(/\s+/)

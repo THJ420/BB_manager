@@ -11,21 +11,20 @@ import type { RecordModel } from 'pocketbase';
  * `branches` owner create rule); the edk_sync hook then mirrors the new branch
  * onto the WordPress storefront, which writes `wordpress_store_id` back.
  * Online-only: a queued branch create could provision a duplicate storefront.
+ *
+ * Enjoy Doner Kebab is the only multi-branch brand — Radhuni and Crispy Chicken
+ * are single-unit sites — so every store created here is an EDK branch.
  */
-
-export const BRANCH_SELECT_OPTIONS = [
-  { id: 'enjoydonerkebab', label: 'ENJOY DONER KEBAB' },
-  { id: 'crispychicken', label: 'CRISPY CHICKEN' },
-  { id: 'radhuni 2.0', label: 'RADHUNI 2.0' },
-] as const;
-
-export type BranchSelect = (typeof BRANCH_SELECT_OPTIONS)[number]['id'];
 
 export interface CreateBranchInput {
   name: string;
   code: string;
   address: string;
-  select: BranchSelect;
+  phone: string;
+  openingHours: string;
+  facebookUrl: string;
+  menuDownloadUrl: string;
+  mapsEmbed: string;
 }
 
 const CODE_PATTERN = /^[A-Z]{2,8}-[A-Z0-9]+(?:-[A-Z0-9]+)*$/;
@@ -46,6 +45,22 @@ export function validateBranchCode(code: string, existingCodes: string[]): strin
   return null;
 }
 
+function validateOptionalUrl(value: string, label: string): string | null {
+  if (!value) return null;
+  if (!/^https?:\/\/\S+$/i.test(value)) {
+    return `${label} must be a full link starting with https://`;
+  }
+  return null;
+}
+
+/** "Mosina" from EDK-MOSINA, for the default "{City} Enjoy Doner Kebab" name. */
+export function storeNameSuggestion(code: string): string {
+  const city = normalizeBranchCode(code).split('-').slice(1).join(' ').trim();
+  if (!city) return '';
+  const titled = city.charAt(0) + city.slice(1).toLowerCase();
+  return `${titled} Enjoy Doner Kebab`;
+}
+
 export async function createOwnerBranch(
   input: CreateBranchInput,
   existingCodes: string[]
@@ -61,13 +76,29 @@ export async function createOwnerBranch(
   const codeError = validateBranchCode(code, existingCodes);
   if (codeError) throw new Error(codeError);
 
+  const facebookUrl = input.facebookUrl.trim();
+  const menuDownloadUrl = input.menuDownloadUrl.trim();
+  const mapsEmbed = input.mapsEmbed.trim();
+  const urlError =
+    validateOptionalUrl(facebookUrl, 'Facebook page link') ||
+    validateOptionalUrl(menuDownloadUrl, 'Download menu link');
+  if (urlError) throw new Error(urlError);
+  if (mapsEmbed && !(mapsEmbed.includes('<iframe') && mapsEmbed.includes('google.com/maps'))) {
+    throw new Error('Paste the full Google Maps embed code (the <iframe …> from Share → Embed a map).');
+  }
+
   try {
     const record = await pb.collection(COLLECTIONS.branches).create<RecordModel>({
       name,
       code,
       slug: code.toLowerCase(),
       address: input.address.trim(),
-      select: input.select,
+      phone: input.phone.trim(),
+      opening_hours: input.openingHours.trim(),
+      facebook_url: facebookUrl,
+      menu_download_url: menuDownloadUrl,
+      maps_embed: mapsEmbed,
+      select: 'enjoydonerkebab',
       is_active: true,
       is_accepting_orders: true,
     });
