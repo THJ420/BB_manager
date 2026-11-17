@@ -1,8 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useReducer, useState } from 'react';
 import { Redirect } from 'expo-router';
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActionButton } from '../../../components/ActionButton';
+import { BulkMenuActionBar } from '../../../components/BulkMenuActionBar';
+import { BulkPriceAdjustModal } from '../../../components/BulkPriceAdjustModal';
 import { DialogModal } from '../../../components/DialogModal';
 import { HorizontalFilterChips } from '../../../components/HorizontalFilterChips';
 import { MenuItemCard } from '../../../components/MenuItemCard';
@@ -21,12 +23,29 @@ import {
   canDeleteMenuItems,
   canEditMenuDetails,
 } from '../../../services/branchScope';
+import {
+  BulkPriceDirection,
+  BulkPriceMode,
+  computeAdjustedPrice,
+} from '../../../services/bulkPrice';
+import {
+  initialMenuSelectionState,
+  menuSelectionReducer,
+} from '../../../state/menuSelection';
 import { Colors, Layout, Spacing } from '../../../theme/colors';
 import { Typography } from '../../../theme/typography';
 import { MenuItem } from '../../../types';
 
 export default function MenuStockScreen() {
-  const { state, setMenuItemStock, saveMenuItem, deleteMenuItem, refreshData } = useApp();
+  const {
+    state,
+    setMenuItemStock,
+    saveMenuItem,
+    deleteMenuItem,
+    bulkUpdateMenuItems,
+    bulkDeleteMenuItems,
+    refreshData,
+  } = useApp();
   const { refreshing, onRefresh } = usePullToRefresh(refreshData);
   const role = state.session?.role ?? '';
   const canCreate = canCreateMenuItems(role);
@@ -38,6 +57,12 @@ export default function MenuStockScreen() {
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MenuItem | null>(null);
   const [remoteCategories, setRemoteCategories] = useState<string[]>([]);
+  const [selection, dispatchSelection] = useReducer(
+    menuSelectionReducer,
+    initialMenuSelectionState
+  );
+  const [priceModalVisible, setPriceModalVisible] = useState(false);
+  const [bulkDeleteVisible, setBulkDeleteVisible] = useState(false);
   const branchId = state.activeBranch.id;
 
   // Categories are fetched from PocketBase rather than hardcoded. The derived
@@ -74,6 +99,57 @@ export default function MenuStockScreen() {
     [state.menuItems, selectedCategory, searchQuery]
   );
   const inStockCount = state.menuItems.filter((item) => item.inStock).length;
+
+  // Selections never survive a filter or branch change: "select all" and every
+  // bulk action operate strictly on what is currently visible.
+  useEffect(() => {
+    dispatchSelection({ type: 'EXIT_SELECTION' });
+  }, [selectedCategory, searchQuery, branchId]);
+
+  // Only ids still present in the current filter can be acted on, so a remote
+  // delete (SSE) or a stale id can never leak into a bulk payload.
+  const selectedItems = useMemo(
+    () => filteredItems.filter((item) => selection.selectedIds.has(item.id)),
+    [filteredItems, selection.selectedIds]
+  );
+
+  const exitSelection = () => dispatchSelection({ type: 'EXIT_SELECTION' });
+
+  const handleBulkStock = (inStock: boolean) => {
+    if (selectedItems.length === 0) return;
+    void bulkUpdateMenuItems(
+      selectedItems.map((item) => ({ id: item.id, fields: { inStock } }))
+    );
+  };
+
+  const handleBulkVisibility = (isVisible: boolean) => {
+    if (selectedItems.length === 0) return;
+    void bulkUpdateMenuItems(
+      selectedItems.map((item) => ({ id: item.id, fields: { isVisible } }))
+    );
+  };
+
+  const handleBulkPrice = (
+    mode: BulkPriceMode,
+    direction: BulkPriceDirection,
+    value: number
+  ) => {
+    setPriceModalVisible(false);
+    if (selectedItems.length === 0) return;
+    void bulkUpdateMenuItems(
+      selectedItems.map((item) => ({
+        id: item.id,
+        fields: { price: computeAdjustedPrice(item.price, mode, direction, value) },
+      }))
+    );
+  };
+
+  const confirmBulkDelete = () => {
+    setBulkDeleteVisible(false);
+    if (selectedItems.length === 0) return;
+    void bulkDeleteMenuItems(selectedItems.map((item) => item.id));
+    exitSelection();
+  };
 
   const openCreate = () => {
     setEditingItem(null);
@@ -123,6 +199,24 @@ export default function MenuStockScreen() {
         onSelect={setSelectedCategory}
       />
 
+      {selection.selectionMode ? (
+        <BulkMenuActionBar
+          selectedCount={selectedItems.length}
+          canDelete={canDelete}
+          onSelectAll={() =>
+            dispatchSelection({
+              type: 'SELECT_ALL',
+              itemIds: filteredItems.map((item) => item.id),
+            })
+          }
+          onCancel={exitSelection}
+          onMarkStock={handleBulkStock}
+          onAdjustPrice={() => setPriceModalVisible(true)}
+          onSetVisibility={handleBulkVisibility}
+          onDelete={() => setBulkDeleteVisible(true)}
+        />
+      ) : null}
+
       <FlatList
         data={filteredItems}
         keyExtractor={(item) => item.id}
@@ -133,6 +227,14 @@ export default function MenuStockScreen() {
               item={item}
               onToggleStock={(inStock) => void setMenuItemStock(item.id, inStock)}
               onEditItem={() => openEdit(item)}
+              selectionMode={selection.selectionMode}
+              selected={selection.selectedIds.has(item.id)}
+              onToggleSelect={() =>
+                dispatchSelection({ type: 'TOGGLE_ITEM', itemId: item.id })
+              }
+              onLongPress={() =>
+                dispatchSelection({ type: 'ENTER_SELECTION', itemId: item.id })
+              }
             />
           </View>
         )}
@@ -205,6 +307,29 @@ export default function MenuStockScreen() {
               if (target) void deleteMenuItem(target.id);
             },
           },
+        ]}
+      />
+
+      <BulkPriceAdjustModal
+        visible={priceModalVisible}
+        itemCount={selectedItems.length}
+        samplePrice={selectedItems[0]?.price}
+        onClose={() => setPriceModalVisible(false)}
+        onApply={handleBulkPrice}
+      />
+
+      <DialogModal
+        visible={bulkDeleteVisible}
+        title="Delete Menu Items"
+        message={`Remove ${selectedItems.length} selected item(s) from the menu and the website? This cannot be undone.`}
+        onRequestClose={() => setBulkDeleteVisible(false)}
+        actions={[
+          {
+            label: 'Cancel',
+            variant: 'outline',
+            onPress: () => setBulkDeleteVisible(false),
+          },
+          { label: 'Delete', variant: 'danger', onPress: confirmBulkDelete },
         ]}
       />
     </SafeAreaView>

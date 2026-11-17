@@ -28,3 +28,6 @@ bb-manager.zip
 # Local EAS / CI build outputs
 build/
 artifacts/
+
+# Local agent workspace / tool metadata (never commit)
+.workbuddy-ai/

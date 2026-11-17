@@ -62,6 +62,11 @@ import {
 } from '../services/branchScope';
 import { startRealtime, RealtimeEntity } from '../services/realtime';
 import { flushOutbox, SyncFailure } from '../services/sync';
+import {
+  BulkMenuPatchItem,
+  buildBulkMenuDeletePayload,
+  buildBulkMenuPatchPayload,
+} from '../services/bulkMenu';
 import { describeSyncHint } from '../services/errors';
 import { runNetworkProbe, NetworkProbeResult } from '../services/networkProbe';
 import { fetchBranchSnapshot, fetchOwnerSnapshot, BranchSnapshot } from '../services/data';
@@ -145,6 +150,10 @@ interface AppContextValue {
   setMenuItemPrice: (itemId: string, price: number) => Promise<void>;
   saveMenuItem: (item: MenuItem) => Promise<void>;
   deleteMenuItem: (itemId: string) => Promise<void>;
+  /** Bulk stock/price/visibility edit; flushes as individual X-BB-Bulk PATCHes. */
+  bulkUpdateMenuItems: (items: BulkMenuPatchItem[]) => Promise<void>;
+  /** Bulk delete; role-gated and flushed as individual X-BB-Bulk DELETEs. */
+  bulkDeleteMenuItems: (itemIds: string[]) => Promise<void>;
   saveTable: (table: DiningTable) => Promise<void>;
   deleteTable: (tableId: string) => Promise<void>;
   updateReservationStatus: (
@@ -1143,6 +1152,59 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [enqueue]
   );
 
+  const bulkUpdateMenuItems = useCallback(
+    async (items: BulkMenuPatchItem[]): Promise<void> => {
+      if (items.length === 0) return;
+      // Only queue ids that still exist locally; a stale id would 404 and
+      // dead-letter noise into the sync card.
+      const known = new Set(stateRef.current.menuItems.map((item) => item.id));
+      const patches = items.filter((item) => known.has(item.id));
+      if (patches.length === 0) return;
+      const at = new Date().toISOString();
+      dispatch({
+        type: 'BULK_SET_MENU_FIELDS',
+        patches: patches.map((patch) => ({ itemId: patch.id, ...patch.fields })),
+        at,
+      });
+      await enqueue(
+        'BULK_MENU_PATCH',
+        `Bulk update ${patches.length} menu item(s)`,
+        {
+          ...buildBulkMenuPatchPayload(patches),
+          branchId: stateRef.current.activeBranch.id,
+        }
+      );
+    },
+    [enqueue]
+  );
+
+  const bulkDeleteMenuItems = useCallback(
+    async (itemIds: string[]): Promise<void> => {
+      const role = stateRef.current.session?.role ?? '';
+      if (!canDeleteMenuItems(role)) {
+        console.error(
+          `[menu] role "${role || 'unknown'}" cannot delete menu items — bulk delete not queued.`
+        );
+        return;
+      }
+      const targets = stateRef.current.menuItems.filter((item) =>
+        itemIds.includes(item.id)
+      );
+      if (targets.length === 0) return;
+      const ids = targets.map((item) => item.id);
+      dispatch({ type: 'BULK_REMOVE_MENU_ITEMS', itemIds: ids });
+      await enqueue(
+        'BULK_MENU_PATCH',
+        `Bulk delete ${ids.length} menu item(s)`,
+        {
+          ...buildBulkMenuDeletePayload(ids),
+          branchId: stateRef.current.activeBranch.id,
+        }
+      );
+    },
+    [enqueue]
+  );
+
   const saveTable = useCallback(
     async (table: DiningTable): Promise<void> => {
       const existing = stateRef.current.tables.find((entry) => entry.id === table.id);
@@ -1338,9 +1400,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // flushOutbox applies within a session, not only after a restart.
         dispatch({ type: 'RETRY_OUTBOX', ids: result.failedIds });
         await Promise.all(
-          result.failedIds.map((id) =>
-            db.incrementOutboxRetry(id).catch(() => undefined)
-          )
+          result.failedIds.map(async (id) => {
+            await db.incrementOutboxRetry(id).catch(() => undefined);
+            // A partial BULK_MENU_PATCH flush trims its payload to the failed
+            // ids; persist that trim so a restart replays only the failures.
+            const entry = entries.find((candidate) => candidate.id === id);
+            if (entry) {
+              await db.updateOutboxPayload(id, entry.payload).catch(() => undefined);
+            }
+          })
         );
       }
 
@@ -1759,6 +1827,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setMenuItemPrice,
       saveMenuItem,
       deleteMenuItem,
+      bulkUpdateMenuItems,
+      bulkDeleteMenuItems,
       saveTable,
       deleteTable,
       updateReservationStatus,
@@ -1793,6 +1863,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setMenuItemPrice,
       saveMenuItem,
       deleteMenuItem,
+      bulkUpdateMenuItems,
+      bulkDeleteMenuItems,
       saveTable,
       deleteTable,
       updateReservationStatus,

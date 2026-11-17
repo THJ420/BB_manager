@@ -9,6 +9,7 @@ import {
   isNotFoundError,
 } from './errors';
 import { buildMenuItemWritePayload, isLocalImageMissing } from './uploads';
+import { bulkRequestOptions } from './bulkMenu';
 import {
   toBranchSettingsRecord,
   toMenuItemRecord,
@@ -73,6 +74,8 @@ const ACTION_TARGETS: Record<
   CREATE_MENU_ITEM: { collection: COLLECTIONS.menuItems, nestedKey: 'item' },
   UPDATE_MENU_ITEM: { collection: COLLECTIONS.menuItems, nestedKey: 'item' },
   DELETE_MENU_ITEM: { collection: COLLECTIONS.menuItems, idKey: 'itemId' },
+  // One entry fans out into individual record requests (no idKey: many ids).
+  BULK_MENU_PATCH: { collection: COLLECTIONS.menuItems },
   SAVE_TABLE: { collection: COLLECTIONS.tables, nestedKey: 'table' },
   DELETE_TABLE: { collection: COLLECTIONS.tables, idKey: 'tableId' },
   UPDATE_RESERVATION_STATUS: {
@@ -101,6 +104,10 @@ function entryTarget(entry: OutboxEntry): {
   }
   if (!branchId && entry.payload.branchId) {
     branchId = String(entry.payload.branchId);
+  }
+  if (entry.actionType === 'BULK_MENU_PATCH') {
+    const count = Array.isArray(entry.payload.items) ? entry.payload.items.length : 0;
+    recordId = `${count} item(s)`;
   }
   return {
     collection: target?.collection ?? 'unknown',
@@ -249,6 +256,87 @@ async function saveTableRecord(table: DiningTable): Promise<void> {
   }
 }
 
+/**
+ * Whitelists the snake_case columns a bulk patch may touch. PocketBase guards
+ * floor_staff to price/in_stock/is_visible, so anything else queued by an older
+ * build is dropped here instead of producing a permanent 400.
+ */
+function bulkPatchFields(raw: unknown): Record<string, unknown> {
+  const fields = (raw ?? {}) as Record<string, unknown>;
+  const allowed: Record<string, unknown> = {};
+  if (typeof fields.price === 'number' && Number.isFinite(fields.price)) {
+    allowed.price = fields.price;
+  }
+  if (typeof fields.in_stock === 'boolean') allowed.in_stock = fields.in_stock;
+  if (typeof fields.is_visible === 'boolean') allowed.is_visible = fields.is_visible;
+  return allowed;
+}
+
+/**
+ * BULK_MENU_PATCH fans out into INDIVIDUAL menu_items PATCH/DELETE requests,
+ * each stamped with `X-BB-Bulk: 1` so the PocketBase hook coalesces downstream
+ * webhooks (1-second drain) instead of firing one webhook per record.
+ * /api/batch is disabled on this deployment and must never be used.
+ *
+ * Partial failure: every item is attempted even if an earlier one fails. The
+ * entry payload is then trimmed to the failed ids only, so a retry replays
+ * just the failed work and a dead-letter discards only the failed ids. A
+ * retryable error is preferred over a permanent one so a transient outage
+ * never dead-letters items that could still succeed.
+ */
+async function applyBulkMenuPatch(entry: OutboxEntry): Promise<void> {
+  const rawItems = Array.isArray(entry.payload.items)
+    ? (entry.payload.items as Array<{ id?: unknown; fields?: unknown }>)
+    : [];
+  assertBranchScope(
+    entry.payload.branchId ? String(entry.payload.branchId) : undefined
+  );
+  const isDelete = entry.payload.operation === 'delete';
+  const options = bulkRequestOptions();
+  const failed: Array<{ item: { id?: unknown; fields?: unknown }; error: unknown }> = [];
+  let applied = 0;
+
+  for (const item of rawItems) {
+    const id = String(item?.id ?? '');
+    if (!id) continue;
+    try {
+      if (isDelete) {
+        console.log(`[payload] menu_items bulk delete ${id}`);
+        await pb.collection(COLLECTIONS.menuItems).delete(id, options);
+      } else {
+        const fields = bulkPatchFields(item.fields);
+        if (Object.keys(fields).length === 0) continue;
+        const scoped = scopeWritePayload(COLLECTIONS.menuItems, fields, 'update');
+        console.log(`[payload] menu_items bulk update ${id} ${JSON.stringify(scoped)}`);
+        await pb.collection(COLLECTIONS.menuItems).update(id, scoped, options);
+      }
+      applied += 1;
+    } catch (error) {
+      failed.push({ item, error });
+    }
+  }
+
+  if (failed.length === 0) return;
+
+  // Trim the queued payload to the failed ids. flushOutbox keeps this entry
+  // queued on retryable errors (retrying only the failures) or dead-letters it
+  // on permanent ones (discarding only the failures). Already-applied ids are
+  // never replayed within this session; after a restart the SQLite payload is
+  // refreshed by syncOutboxNow, and any stale replay is idempotent (PATCH) or
+  // self-heals through the 404 dead-letter path (DELETE).
+  entry.payload = { ...entry.payload, items: failed.map((failure) => failure.item) };
+  console.warn(
+    `[sync] BULK_MENU_PATCH partial: ${applied} applied, ${failed.length} failed` +
+      ` | failed ids=${failed.map((failure) => String(failure.item?.id ?? '')).join(',')}`
+  );
+
+  const described = failed.map((failure) => describePocketBaseError(failure.error));
+  const retryableIndex = described.findIndex(
+    (error) => !PERMANENT_ERROR_KINDS.has(error.kind)
+  );
+  throw failed[retryableIndex >= 0 ? retryableIndex : 0].error;
+}
+
 async function applyOutboxEntry(entry: OutboxEntry): Promise<void> {
   switch (entry.actionType) {
     case 'UPDATE_ORDER_STATUS': {
@@ -337,6 +425,10 @@ async function applyOutboxEntry(entry: OutboxEntry): Promise<void> {
       );
       console.log(`[payload] menu_items delete ${itemId}`);
       await pb.collection(COLLECTIONS.menuItems).delete(itemId);
+      return;
+    }
+    case 'BULK_MENU_PATCH': {
+      await applyBulkMenuPatch(entry);
       return;
     }
     case 'SAVE_TABLE': {

@@ -75,6 +75,17 @@ export type AppAction =
   | { type: 'REMOVE_MENU_ITEM'; itemId: string }
   | { type: 'SET_MENU_STOCK'; itemId: string; inStock: boolean; at: string }
   | { type: 'SET_MENU_PRICE'; itemId: string; price: number; at: string }
+  | {
+      type: 'BULK_SET_MENU_FIELDS';
+      patches: Array<{
+        itemId: string;
+        price?: number;
+        inStock?: boolean;
+        isVisible?: boolean;
+      }>;
+      at: string;
+    }
+  | { type: 'BULK_REMOVE_MENU_ITEMS'; itemIds: string[] }
   | { type: 'SET_TABLES'; tables: DiningTable[] }
   | { type: 'SAVE_TABLE'; table: DiningTable }
   | { type: 'REMOVE_TABLE'; tableId: string }
@@ -273,6 +284,32 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           item.id === action.itemId ? { ...item, price: action.price, updatedAt: action.at } : item
         ),
       };
+
+    case 'BULK_SET_MENU_FIELDS': {
+      const byId = new Map(action.patches.map((patch) => [patch.itemId, patch]));
+      return {
+        ...state,
+        menuItems: state.menuItems.map((item) => {
+          const patch = byId.get(item.id);
+          if (!patch) return item;
+          return {
+            ...item,
+            ...(patch.price !== undefined ? { price: patch.price } : {}),
+            ...(patch.inStock !== undefined ? { inStock: patch.inStock } : {}),
+            ...(patch.isVisible !== undefined ? { isVisible: patch.isVisible } : {}),
+            updatedAt: action.at,
+          };
+        }),
+      };
+    }
+
+    case 'BULK_REMOVE_MENU_ITEMS': {
+      const removed = new Set(action.itemIds);
+      return {
+        ...state,
+        menuItems: state.menuItems.filter((item) => !removed.has(item.id)),
+      };
+    }
 
     case 'SET_TABLES':
       return { ...state, tables: action.tables };

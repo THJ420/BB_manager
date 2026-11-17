@@ -153,6 +153,23 @@ export async function incrementOutboxRetry(id: string): Promise<void> {
   );
 }
 
+/**
+ * Persists a rewritten payload for a queued entry. BULK_MENU_PATCH trims its
+ * item list to the failed ids after a partial flush; storing the trimmed
+ * payload keeps a restart from replaying already-applied records.
+ */
+export async function updateOutboxPayload(
+  id: string,
+  payload: Record<string, unknown>
+): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync(
+    `UPDATE outbox_queue SET payload = ? WHERE id = ?`,
+    JSON.stringify(payload),
+    id
+  );
+}
+
 export async function deleteOutboxEntries(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   const db = await getDatabase();

@@ -9,18 +9,42 @@ export interface MenuItemCardProps {
   item: MenuItem;
   onToggleStock: (inStock: boolean) => void;
   onEditItem: () => void;
+  /** Multi-select mode: taps toggle selection instead of opening the editor. */
+  selectionMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
+  /** Long-press enters selection mode (handled by the menu screen). */
+  onLongPress?: () => void;
 }
 
-export function MenuItemCard({ item, onToggleStock, onEditItem }: MenuItemCardProps) {
+export function MenuItemCard({
+  item,
+  onToggleStock,
+  onEditItem,
+  selectionMode = false,
+  selected = false,
+  onToggleSelect,
+  onLongPress,
+}: MenuItemCardProps) {
+  const handlePress = selectionMode ? onToggleSelect ?? onEditItem : onEditItem;
+  const pressLabel = selectionMode
+    ? `${selected ? 'Deselect' : 'Select'} ${item.name}`
+    : `Edit ${item.name}`;
+
   return (
     <View
-      style={[styles.card, !item.inStock && styles.cardOutOfStock]}
+      style={[
+        styles.card,
+        !item.inStock && styles.cardOutOfStock,
+        selectionMode && selected && styles.cardSelected,
+      ]}
       testID={`menu_item_${item.id}`}
     >
       <Pressable
-        onPress={onEditItem}
+        onPress={handlePress}
+        onLongPress={onLongPress}
         accessibilityRole="button"
-        accessibilityLabel={`Edit ${item.name}`}
+        accessibilityLabel={pressLabel}
         style={styles.mediaPress}
       >
         {item.imageUrl ? (
@@ -31,7 +55,7 @@ export function MenuItemCard({ item, onToggleStock, onEditItem }: MenuItemCardPr
           </View>
         )}
 
-        <View style={styles.mediaOverlay}>
+        <View style={[styles.mediaOverlay, selectionMode && styles.mediaOverlayShifted]}>
           <View style={styles.categoryPill}>
             <Text style={styles.categoryText} numberOfLines={1}>
               {item.category.toUpperCase()}
@@ -45,10 +69,25 @@ export function MenuItemCard({ item, onToggleStock, onEditItem }: MenuItemCardPr
         </View>
       </Pressable>
 
+      {selectionMode ? (
+        <View
+          style={[styles.selectBadge, selected && styles.selectBadgeOn]}
+          pointerEvents="none"
+          testID={`select_badge_${item.id}`}
+        >
+          <Text style={[styles.selectBadgeText, selected && styles.selectBadgeTextOn]}>
+            {selected ? '✓' : ''}
+          </Text>
+        </View>
+      ) : null}
+
       <Pressable
-        onPress={onEditItem}
+        onPress={handlePress}
+        onLongPress={onLongPress}
         accessibilityRole="button"
-        accessibilityLabel={`Edit details for ${item.name}`}
+        accessibilityLabel={
+          selectionMode ? pressLabel : `Edit details for ${item.name}`
+        }
         style={styles.body}
       >
         <Text style={styles.name} numberOfLines={2}>
@@ -63,20 +102,34 @@ export function MenuItemCard({ item, onToggleStock, onEditItem }: MenuItemCardPr
 
       <View style={styles.footer}>
         <Pressable
-          onPress={onEditItem}
+          onPress={handlePress}
+          onLongPress={onLongPress}
           accessibilityRole="button"
-          accessibilityLabel={`Edit ${item.name}, currently ${formatCurrency(item.price)}`}
+          accessibilityLabel={
+            selectionMode
+              ? pressLabel
+              : `Edit ${item.name}, currently ${formatCurrency(item.price)}`
+          }
           testID={`price_edit_${item.id}`}
           style={styles.priceBlock}
         >
           <Text style={styles.price}>{formatCurrency(item.price)}</Text>
-          <Text style={styles.priceHint}>TAP TO EDIT ITEM</Text>
+          <Text style={styles.priceHint}>
+            {selectionMode ? 'TAP TO SELECT' : 'TAP TO EDIT ITEM'}
+          </Text>
         </Pressable>
 
-        <View style={styles.stockBlock}>
+        <Pressable
+          style={styles.stockBlock}
+          onPress={selectionMode ? handlePress : undefined}
+          disabled={!selectionMode}
+          accessibilityRole={selectionMode ? 'button' : undefined}
+          accessibilityLabel={selectionMode ? pressLabel : undefined}
+        >
           <Switch
             value={item.inStock}
             onValueChange={onToggleStock}
+            disabled={selectionMode}
             trackColor={{
               false: Colors.switchTrackOff,
               true: Colors.success,
@@ -93,7 +146,7 @@ export function MenuItemCard({ item, onToggleStock, onEditItem }: MenuItemCardPr
           >
             {item.inStock ? 'IN STOCK' : 'OUT OF STOCK'}
           </Text>
-        </View>
+        </Pressable>
       </View>
     </View>
   );
@@ -112,6 +165,39 @@ const styles = StyleSheet.create({
   },
   cardOutOfStock: {
     borderColor: Colors.errorBorder,
+  },
+  cardSelected: {
+    borderColor: Colors.primary,
+    borderWidth: 2,
+  },
+  mediaOverlayShifted: {
+    right: 34,
+  },
+  selectBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 24,
+    height: 24,
+    borderRadius: Radius.full,
+    borderWidth: 2,
+    borderColor: Colors.glassBorderStrong,
+    backgroundColor: 'rgba(15, 17, 23, 0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectBadgeOn: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primary,
+  },
+  selectBadgeText: {
+    fontFamily: Fonts.interBold,
+    fontSize: 13,
+    lineHeight: 16,
+    color: Colors.white,
+  },
+  selectBadgeTextOn: {
+    color: Colors.white,
   },
   mediaPress: {
     borderRadius: Radius.md,
