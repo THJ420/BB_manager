@@ -83,7 +83,6 @@ import {
 import { shouldShowBackgroundRationale } from '../services/backgroundPermissions';
 import {
   Branch,
-  ConnectionStatus,
   DaySchedule,
   DiningTable,
   MenuItem,
@@ -174,7 +173,6 @@ interface AppContextValue {
   /** Drop only the named rejected entries; the rest of the queue stays live. */
   discardOutboxEntries: (ids: string[]) => Promise<void>;
   runSyncDiagnostics: () => Promise<SyncDiagnosticsReport>;
-  setConnectionStatus: (status: ConnectionStatus) => void;
   setBranch: (branch: Branch) => Promise<void>;
   /** Manual "Check for Updates": opens the prompt immediately when newer. */
   checkForAppUpdate: () => Promise<UpdateCheck>;
@@ -1714,10 +1712,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(timer);
   }, [state.hydrated, state.session, syncOutboxNow, probeConnection]);
 
-  const setConnectionStatus = useCallback((status: ConnectionStatus): void => {
-    dispatch({ type: 'SET_CONNECTION', status });
-  }, []);
-
   const setBranch = useCallback(
     async (branch: Branch): Promise<void> => {
       // The owner console aggregates every branch and never swaps its dataset.
@@ -1845,7 +1839,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       clearOutbox,
       discardOutboxEntries,
       runSyncDiagnostics,
-      setConnectionStatus,
       setBranch,
       checkForAppUpdate,
       checkingAppUpdate,
@@ -1881,7 +1874,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       clearOutbox,
       discardOutboxEntries,
       runSyncDiagnostics,
-      setConnectionStatus,
       setBranch,
       checkForAppUpdate,
       checkingAppUpdate,

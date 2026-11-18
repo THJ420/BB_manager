@@ -28,19 +28,12 @@ import { Fonts, Typography } from '../../theme/typography';
 import {
   AlertToneId,
   Branch,
-  ConnectionStatus,
   NotificationRoute,
   NotificationSettings,
   SmtpEncryption,
   SmtpSettings,
   TerminalSettings,
 } from '../../types';
-
-const CONNECTION_MODES: Array<{ id: ConnectionStatus; label: string }> = [
-  { id: 'live', label: 'ONLINE' },
-  { id: 'polling', label: 'SYNCING' },
-  { id: 'offline', label: 'OFFLINE' },
-];
 
 export default function TerminalSettingsScreen() {
   const router = useRouter();
@@ -57,7 +50,6 @@ export default function TerminalSettingsScreen() {
     clearOutbox,
     discardOutboxEntries,
     runSyncDiagnostics,
-    setConnectionStatus,
     setBranch,
   } = useApp();
 
@@ -391,31 +383,6 @@ export default function TerminalSettingsScreen() {
         </SectionCard>
 
         <SectionCard title="SYNC & DATA HEALTH">
-          <Text style={styles.rowTitle}>Connection Protocol</Text>
-          <View style={styles.segmentTrack}>
-            {CONNECTION_MODES.map((mode) => {
-              const selected = state.connection === mode.id;
-              return (
-                <Pressable
-                  key={mode.id}
-                  onPress={() => setConnectionStatus(mode.id)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  style={[styles.segment, selected && styles.segmentSelected]}
-                >
-                  <Text
-                    style={[styles.segmentText, selected && styles.segmentTextSelected]}
-                    numberOfLines={1}
-                  >
-                    {mode.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <View style={styles.divider} />
-
           <View style={styles.outboxRow}>
             <View style={styles.outboxText}>
               <Text style={styles.rowTitle}>Offline Outbox Queue</Text>
@@ -1441,34 +1408,6 @@ const styles = StyleSheet.create({
   alertToneText: {
     flex: 1,
     gap: 2,
-  },
-  segmentTrack: {
-    flexDirection: 'row',
-    gap: 4,
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Colors.glassBorder,
-    padding: 4,
-  },
-  segment: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: Radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 2,
-  },
-  segmentSelected: {
-    backgroundColor: Colors.primary,
-  },
-  segmentText: {
-    fontFamily: Fonts.interBold,
-    fontSize: 10,
-    color: Colors.textMuted,
-  },
-  segmentTextSelected: {
-    color: Colors.white,
   },
   outboxRow: {
     flexDirection: 'row',

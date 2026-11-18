@@ -50,10 +50,7 @@ export function UpdateCheckButton() {
           <ActivityIndicator style={styles.spinner} color={Colors.primary} />
         ) : null}
       </View>
-      <Text style={styles.hint}>
-        Installed: v{currentAppVersion()} · Updates are delivered from the official
-        GitHub release.
-      </Text>
+      <Text style={styles.hint}>Current Version: v{currentAppVersion()}</Text>
 
       <DialogModal
         visible={result !== null}
