@@ -175,12 +175,19 @@ export function nextOrderNumber(orders: Order[]): string {
 
 const SIMULATED_CUSTOMERS = ['Chloe Zhang', 'James Miller', 'Maya Lin', 'Liam Davis'];
 
-/** Builds the deterministic shape of a new online pickup ticket. */
+/**
+ * Builds the deterministic shape of a new online pickup ticket.
+ *
+ * Takeout and packaging fees configured in terminal settings are added to the
+ * items subtotal, mirroring the storefront checkout so a ticket's total always
+ * matches what the customer was charged.
+ */
 export function buildSimulatedOrder(
   orders: Order[],
   branchId: string,
   now: number,
-  random: () => number = Math.random
+  random: () => number = Math.random,
+  fees?: { takeout?: number; packaging?: number }
 ): Order {
   const orderNumber = nextOrderNumber(orders);
   const items = [
@@ -193,7 +200,12 @@ export function buildSimulatedOrder(
     Math.floor(random() * SIMULATED_CUSTOMERS.length)
   );
   const pickupDigits = 1000 + Math.floor(random() * 9000);
-  const total = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+  const takeout = Math.max(0, Number(fees?.takeout ?? 0) || 0);
+  const packaging = Math.max(0, Number(fees?.packaging ?? 0) || 0);
+  const total =
+    items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0) +
+    takeout +
+    packaging;
 
   return {
     id: `ord_${orderNumber}`,

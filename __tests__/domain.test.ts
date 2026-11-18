@@ -76,6 +76,26 @@ describe('order transitions', () => {
     expect(order.estimatedPickupAt).toBe('2026-09-11T12:18:00.000Z'.replace('2026-09-11', '2026-01-01'));
     expect(order.branchId).toBe('branch_dt_01');
   });
+
+  it('adds configured takeout and packaging fees to the ticket total', () => {
+    const orders = createSeedOrders(NOW);
+    const order = buildSimulatedOrder(orders, 'branch_dt_01', NOW, () => 0.5, {
+      takeout: 2,
+      packaging: 1.5,
+    });
+
+    expect(order.totalAmount).toBe(24.75 + 2 + 1.5);
+  });
+
+  it('treats negative or non-numeric fees as zero', () => {
+    const orders = createSeedOrders(NOW);
+    const order = buildSimulatedOrder(orders, 'branch_dt_01', NOW, () => 0.5, {
+      takeout: -5,
+      packaging: Number.NaN,
+    });
+
+    expect(order.totalAmount).toBe(24.75);
+  });
 });
 
 describe('menu filtering', () => {

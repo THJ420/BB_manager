@@ -1034,7 +1034,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const order = buildSimulatedOrder(
       stateRef.current.orders,
       stateRef.current.activeBranch.id,
-      Date.now()
+      Date.now(),
+      Math.random,
+      stateRef.current.settings.fees
     );
     dispatch({ type: 'ADD_ORDER', order });
     enqueueIncomingCall(order);
